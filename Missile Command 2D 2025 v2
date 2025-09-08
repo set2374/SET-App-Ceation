@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<title>Missile Command 2025 - Polished</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; background:#000; touch-action:none; -webkit-tap-highlight-color:transparent; }
+  body { overflow:hidden; font-family:'Segoe UI', Arial, sans-serif; }
+  #c { display:block; cursor:crosshair; background:linear-gradient(to bottom, #000428 0%, #004e92 100%); }
+  #ui { position:absolute; top:14px; left:14px; color:#0ff; font-size:18px; font-weight:600; text-shadow:0 0 8px #0ff; user-select:none; }
+  #ui div { line-height:1.2; }
+  .screen { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; z-index:10; }
+  #ov { display:none; color:#f33; }
+  #ov h2 { font-size:46px; text-shadow:0 0 20px #f00; }
+  #ov p { font-size:18px; margin-top:8px; color:#fcc; }
+  #st { background:rgba(0,0,0,.82); color:#0ff; }
+  #st h1 { font-size:44px; text-shadow:0 0 18px #0ff; margin-bottom:14px; }
+  #st button { padding:14px 36px; font-size:22px; border:0; border-radius:8px; background:#06c; color:#fff; cursor:pointer; box-shadow:0 0 20px #06c; transition:all .15s ease; }
+  #st button:hover { background:#08f; box-shadow:0 0 28px #08f; transform:scale(1.05); }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div>SCORE <span id="sc">0</span></div>
+  <div>CITIES <span id="ct">6</span></div>
+  <div>MISSILES <span id="ml">30</span></div>
+  <div>LEVEL <span id="lv">1</span></div>
+</div>
+
+<div id="ov" class="screen">
+  <h2>GAME OVER</h2>
+  <p>Final score <span id="fs">0</span></p>
+  <p>Tap to restart</p>
+</div>
+
+<div id="st" class="screen">
+  <h1>MISSILE COMMAND 2025</h1>
+  <button id="sb">START</button>
+  <p style="margin-top:20px; color:#fff;">Click / tap to launch.</p>
+</div>
+
+<script>
+'use strict';
+(()=>{
+
+/* ---------- DOM & Canvas Setup ---------- */
+// REFINEMENT: Cache all DOM elements in a single object for clarity and performance.
+const ui = {
+  can: document.getElementById('c'),
+  ctx: document.getElementById('c').getContext('2d'),
+  sc: document.getElementById('sc'), ct: document.getElementById('ct'),
+  ml: document.getElementById('ml'), lv: document.getElementById('lv'),
+  fs: document.getElementById('fs'), ov: document.getElementById('ov'),
+  st: document.getElementById('st'), sb: document.getElementById('sb')
+};
+let dpr = 1;
+function resize(){
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = window.innerWidth, h = window.innerHeight;
+  ui.can.width = w * dpr; ui.can.height = h * dpr;
+  ui.can.style.width = w + 'px'; ui.can.style.height = h + 'px';
+  ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildCities();
+}
+window.addEventListener('resize', resize, {passive: true});
+resize();
+
+/* ---------- Game State & Entities ---------- */
+let state = 'start', score = 0, level = 1, missileCount = 30, cityCount = 6;
+const cities = [], missiles = [], explosions = [], particles = [];
+
+/* ---------- Classes (Missile, Explosion, Particle) ---------- */
+class Missile {
+  constructor(sx, sy, tx, ty, isEnemy) {
+    this.isEnemy = isEnemy; this.trail = [];
+    this.reset(sx, sy, tx, ty, isEnemy);
+  }
+  reset(sx, sy, tx, ty, isEnemy) {
+    this.x = sx; this.y = sy; this.tx = tx; this.ty = ty; this.isEnemy = isEnemy;
+    // Speed: Ally is constant, enemy gets faster and has a max speed.
+    const speed = isEnemy ? Math.min(0.35, 0.18 + level * 0.025) : 1.2;
+    let vx, vy;
+    if (isEnemy) { // Ballistic trajectory for enemies
+      const dx = tx - sx, dy = ty - sy, g = 0.00025;
+      const t = Math.sqrt(2 * (dy + Math.sqrt(dy * dy + g * dx * dx)) / g);
+      vx = dx / t; vy = dy / t - 0.5 * g * t;
+    } else { // Straight line for allies
+      const angle = Math.atan2(ty - sy, tx - sx);
+      vx = Math.cos(angle) * speed; vy = Math.sin(angle) * speed;
+    }
+    this.vx = vx; this.vy = vy;
+    this.angle = Math.atan2(this.vy, this.vx);
+    this.alive = true; this.trail.length = 0;
+    return this;
+  }
+  update(dt) {
+    if (!this.alive) return;
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 20) this.trail.shift();
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (this.isEnemy) {
+      this.vy += 0.00025 * dt; // Apply gravity
+      this.angle = Math.atan2(this.vy, this.vx);
+    }
+    if ((this.tx - this.x) ** 2 + (this.ty - this.y) ** 2 < 400) this.explode();
+    if (this.y > window.innerHeight + 10) this.alive = false;
+  }
+  explode() {
+    if (!this.alive) return;
+    this.alive = false;
+    const radius = this.isEnemy ? 90 : 70;
+    explosions.push(pool.getExplosion().reset(this.x, this.y, radius, this.isEnemy));
+    if (this.isEnemy) {
+      for (const city of cities) {
+        if (city.alive && (city.x - this.x) ** 2 + (city.y - this.y) ** 2 < radius * radius) {
+          city.alive = false; cityCount--;
+        }
+      }
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const ctx = ui.ctx; // Use cached context
+    if (this.trail.length > 1) {
+      ctx.strokeStyle = this.isEnemy ? 'rgba(255,150,150,.35)' : 'rgba(150,255,255,.35)';
+      ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      ctx.stroke();
+    }
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+    ctx.shadowBlur = 12; ctx.shadowColor = this.isEnemy ? '#f00' : '#0ff';
+    ctx.fillStyle = this.isEnemy ? '#ff4444' : '#44ffff'; ctx.fillRect(-14, -3, 28, 6);
+    ctx.fillStyle = this.isEnemy ? '#ff8888' : '#88ffff';
+    ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(19, -3); ctx.lineTo(19, 3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+class Explosion {
+  reset(x, y, maxR, isEnemy) {
+    this.x = x; this.y = y; this.r = 0; this.maxR = maxR; this.life = 1;
+    this.alive = true; this.isEnemy = isEnemy;
+    for (let i = 0; i < 40; i++) particles.push(pool.getParticle().reset(this.x, this.y, this.isEnemy ? 'orange' : 'cyan'));
+    return this;
+  }
+  update(dt) {
+    if (!this.alive) return;
+    this.r += 140 * (dt / 1000); // Frame-rate independent growth
+    this.life = Math.max(0, 1 - this.r / this.maxR);
+    if (this.r >= this.maxR) { this.alive = false; return; }
+    if (this.isEnemy) return; // Only ally blasts hurt enemies
+    const radiusSq = this.r * this.r;
+    for (const missile of missiles) {
+      if (missile.alive && missile.isEnemy && (missile.x - this.x) ** 2 + (missile.y - this.y) ** 2 <= radiusSq) {
+        missile.explode(); score += 25 * level;
+      }
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const ctx = ui.ctx;
+    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r);
+    const grad = this.isEnemy ?
+      {c1:'rgba(255,255,255,', c2:'rgba(255,210,120,', c3:'rgba(255,120,0,', c4:'rgba(255,0,0,0)'} :
+      {c1:'rgba(240,248,255,', c2:'rgba(100,200,255,', c3:'rgba(0,150,255,', c4:'rgba(0,0,0,0)'};
+    g.addColorStop(0,   grad.c1 + this.life + ')');
+    g.addColorStop(0.3, grad.c2 + this.life * 0.8 + ')');
+    g.addColorStop(0.6, grad.c3 + this.life * 0.55 + ')');
+    g.addColorStop(1,   grad.c4);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+class Particle {
+  reset(x, y, color) {
+    this.x = x; this.y = y;
+    this.vx = (Math.random() - 0.5) * 8; this.vy = (Math.random() - 0.5) * 8;
+    this.life = 1;
+    // REFINEMENT: Simpler, frame-rate independent decay.
+    this.decay = 1.5 + Math.random(); // Seconds to live
+    this.color = color; this.alive = true;
+    return this;
+  }
+  update(dt) {
+    if (!this.alive) return;
+    this.x += this.vx; this.y += this.vy; this.vy += 0.2; // Gravity
+    this.life -= (dt / 1000) / this.decay;
+    if (this.life <= 0) this.alive = false;
+  }
+  draw() {
+    if (!this.alive) return;
+    const ctx = ui.ctx;
+    ctx.globalAlpha = Math.max(0, this.life);
+    ctx.fillStyle = this.color === 'orange' ? '#ff6600' : '#00ffff';
+    ctx.fillRect(this.x - 1.5, this.y - 1.5, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- Object Pooling ---------- */
+const pool = {
+  missiles: [], explosions: [], particles: [],
+  getMissile:   function(){ return this.missiles.pop() || new Missile(0,0,0,0,true); },
+  freeMissile:  function(m){ this.missiles.push(m); },
+  getExplosion: function(){ return this.explosions.pop() || new Explosion(); },
+  freeExplosion:function(e){ this.explosions.push(e); },
+  getParticle:  function(){ return this.particles.pop() || new Particle(); },
+  freeParticle: function(p){ this.particles.push(p); }
+};
+
+/* ---------- Game Logic (Cities, Spawning, World Draw) ---------- */
+function buildCities() {
+  cities.length = 0; cityCount = 6;
+  const gap = window.innerWidth / 7, groundY = window.innerHeight - 46;
+  for (let i = 0; i < 6; i++) cities.push({ x: gap * (i + 1), y: groundY, alive: true });
+}
+
+let spawnTimer = 0;
+const pendingSpawns = [];
+function updateSpawning(dt) {
+  spawnTimer += dt;
+  const spawnInterval = Math.max(600, 2000 - level * 120);
+  if (spawnTimer >= spawnInterval) {
+    spawnTimer = 0;
+    const volleySize = Math.min(3 + Math.floor(level / 3), 8);
+    for (let i = 0; i < volleySize; i++) {
+      pendingSpawns.push({ delay: i * 180, x: Math.random() * window.innerWidth });
+    }
+  }
+  for (let i = pendingSpawns.length - 1; i >= 0; i--) {
+    const s = pendingSpawns[i]; s.delay -= dt;
+    if (s.delay <= 0 && state === 'playing') {
+      const liveCities = cities.filter(c => c.alive);
+      let tx = window.innerWidth / 2, ty = window.innerHeight - 40;
+      if (liveCities.length) { const t = liveCities[(Math.random() * liveCities.length)|0]; tx = t.x; ty = t.y; }
+      missiles.push(pool.getMissile().reset(s.x, 0, tx, ty, true));
+      pendingSpawns.splice(i, 1);
+    }
+  }
+}
+
+function drawWorld() {
+  const ctx = ui.ctx;
+  const groundY = window.innerHeight - 46;
+  ctx.fillStyle = '#222'; ctx.fillRect(0, groundY, window.innerWidth, 46);
+  ctx.shadowBlur = 20; ctx.shadowColor = '#0f0';
+  for (const c of cities) {
+    if (c.alive) {
+      ctx.fillStyle = '#006600';
+      ctx.fillRect(c.x - 20, c.y - 30, 40, 30);
+    }
+  }
+  ctx.shadowBlur = 0;
+}
+
+/* ---------- Game State & UI Management ---------- */
+function updateUI() {
+  ui.sc.textContent = score | 0; ui.ct.textContent = cityCount;
+  ui.ml.textContent = missileCount; ui.lv.textContent = level;
+}
+function gameOver() {
+  state = 'over'; ui.fs.textContent = score | 0; ui.ov.style.display = 'flex';
+}
+function startGame() {
+  state = 'playing'; score = 0; level = 1; missileCount = 30;
+  [missiles, explosions, particles, pendingSpawns].forEach(arr => arr.length = 0);
+  spawnTimer = 0; buildCities(); updateUI();
+  ui.st.style.display = 'none'; ui.ov.style.display = 'none';
+}
+
+/* ---------- Input Handling ---------- */
+function fire(x, y) {
+  if (state === 'over') { startGame(); return; }
+  if (state !== 'playing' || missileCount <= 0) return;
+  let bestDistSq = Infinity, closestCity = null;
+  for (const c of cities) {
+    if (c.alive) {
+      const distSq = (c.x - x)**2 + (c.y - y)**2;
+      if (distSq < bestDistSq) { bestDistSq = distSq; closestCity = c; }
+    }
+  }
+  if (closestCity) {
+    missiles.push(pool.getMissile().reset(closestCity.x, closestCity.y, x, y, false));
+    missileCount--; updateUI();
+  }
+}
+ui.can.addEventListener('click', e => { const r = ui.can.getBoundingClientRect(); fire(e.clientX - r.left, e.clientY - r.top); }, {passive:true});
+ui.can.addEventListener('touchstart', e => { e.preventDefault(); const t = e.changedTouches[0], r = ui.can.getBoundingClientRect(); fire(t.clientX - r.left, t.clientY - r.top); }, {passive:false});
+ui.sb.addEventListener('click', startGame, {passive:true});
+ui.ov.addEventListener('click', startGame, {passive:true});
+
+/* ---------- Main Game Loop ---------- */
+// REFINEMENT: Centralized compacting logic for cleanliness.
+function compactAndFree(arr, poolFreeFn) {
+  let writeIndex = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    if (item.alive) {
+      arr[writeIndex++] = item;
+    } else {
+      poolFreeFn(item);
+    }
+  }
+  arr.length = writeIndex;
+}
+
+let lastTime = performance.now();
+function frame(currentTime) {
+  const dt = Math.min(32, currentTime - lastTime);
+  lastTime = currentTime;
+  ui.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+  if (state === 'playing') {
+    updateSpawning(dt);
+    missiles.forEach(m => m.update(dt));
+    explosions.forEach(e => e.update(dt));
+    particles.forEach(p => p.update(dt));
+
+    drawWorld();
+    explosions.forEach(e => e.draw());
+    missiles.forEach(m => m.draw());
+    particles.forEach(p => p.draw());
+
+    compactAndFree(missiles, pool.freeMissile);
+    compactAndFree(explosions, pool.freeExplosion);
+    compactAndFree(particles, pool.freeParticle);
+
+    if (score >= level * 1000) { level++; missileCount += 6; updateUI(); }
+    if (cityCount <= 0 || (missileCount <= 0 && !missiles.some(m => !m.isEnemy))) gameOver();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
