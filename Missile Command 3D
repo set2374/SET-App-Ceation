@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+    <title>3D Missile Command - Optimized</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+        }
+    }
+    </script>
+    <style>
+        /* --- Basic Styling --- */
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+
+        body { 
+            font-family: 'Courier New', monospace; 
+            background: #000; 
+            color: white;
+            overflow: hidden; 
+            height: 100vh; /* Fallback for older browsers */
+            height: 100dvh; /* Dynamic viewport height for mobile */
+            -webkit-user-select: none; /* Disable text selection */
+            user-select: none; 
+        }
+
+        #gameContainer { 
+            position: relative; 
+            width: 100vw; 
+            height: 100dvh; 
+            cursor: crosshair;
+        }
+
+        /* --- UI Elements --- */
+        .ui-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px;
+            border-radius: 8px;
+            z-index: 100;
+        }
+        
+        #hud { 
+            top: 10px; 
+            left: 10px; 
+            font-size: 14px;
+        }
+        
+        #controls { 
+            top: 10px; 
+            right: 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+        }
+        
+        #instructions { 
+            bottom: 10px; 
+            left: 10px; 
+            font-size: 12px; 
+        }
+        
+        #gyroStatus { 
+            bottom: 10px; 
+            right: 10px; 
+            font-size: 10px; 
+        }
+
+        .control-btn { 
+            padding: 10px 14px; 
+            border: 1px solid #555;
+            background: #333;
+            color: #eee;
+            border-radius: 6px; 
+            font-weight: bold; 
+            font-size: 12px; 
+            cursor: pointer; 
+            touch-action: manipulation; /* Prevents double-tap zoom on mobile */
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .control-btn:hover {
+            background-color: #444;
+        }
+        
+        .launcher-btn.active { 
+            background: #0066cc; 
+            color: white; 
+            border-color: #0088ff;
+        }
+        
+        .launcher-btn.thaad.active { 
+            background: #00cc66; 
+            border-color: #00ff88;
+        }
+
+        /* --- Game Over Screen --- */
+        #gameOver { 
+            position: absolute; 
+            inset: 0; /* top, right, bottom, left = 0 */
+            background: rgba(0, 0, 0, 0.9); 
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center; 
+            z-index: 200; 
+            text-align: center;
+        }
+        
+        #gameOver h2 {
+            font-size: 2rem;
+            color: #ff4444;
+            margin-bottom: 1rem;
+        }
+
+        #restartBtn { 
+            padding: 15px 30px; 
+            background: #cc2222; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            margin-top: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="hud" class="ui-panel">
+            <div>Score: <span id="score">0</span></div>
+            <div>Wave: <span id="wave">1</span></div>
+            <div>Cities: <span id="cities">6</span></div>
+            <div style="color: #0f0; margin-top: 5px;">
+                <span id="launcher">PATRIOT</span> | <span id="viewMode">GROUND</span>
+            </div>
+        </div>
+        
+        <div id="controls" class="ui-panel">
+            <button class="control-btn launcher-btn active" id="patriotBtn">PATRIOT (1)</button>
+            <button class="control-btn launcher-btn thaad" id="thaadBtn">THAAD (2)</button>
+            <button class="control-btn system-btn" id="viewBtn">VIEW (V)</button>
+        </div>
+        
+        <div id="instructions" class="ui-panel">
+            <div id="desktopInstructions">
+                Mouse to aim, Click to fire<br>Scroll to zoom
+            </div>
+        </div>
+        
+        <div id="gameOver">
+            <h2>MISSION FAILED</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <p>Waves Survived: <span id="wavesScore">0</span></p>
+            <button id="restartBtn">RESTART MISSION</button>
+        </div>
+    </div>
+
+<script type="module">
+    // Import necessary components from the Three.js library via the importmap
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    /**
+     * The main Game class encapsulates all logic, state, and objects.
+     * This object-oriented approach keeps the code organized and avoids polluting the global scope.
+     */
+    class Game {
+        constructor() {
+            // Game State
+            this.gameState = {
+                score: 0, wave: 1, citiesRemaining: 6, isGameOver: false,
+                activeLauncher: 'patriot', viewMode: 'ground'
+            };
+            
+            // Core Three.js Components
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            this.composer = null; // For post-processing effects
+            this.clock = new THREE.Clock(); // For frame-rate independent physics
+
+            // Game Object Arrays
+            this.missiles = [];
+            this.interceptors = [];
+            this.explosions = [];
+            this.cities = [];
+            this.launchers = { patriot: null, thaad: null };
+            this.crosshair = null;
+
+            // Performance: Object pooling to reuse objects and prevent garbage collection stutters
+            this.missilePool = new ObjectPool(() => this.createMissileMesh(true), 20);
+            this.interceptorPool = {
+                patriot: new ObjectPool(() => this.createMissileMesh(false, 'patriot'), 15),
+                thaad: new ObjectPool(() => this.createMissileMesh(false, 'thaad'), 15)
+            };
+            this.explosionPool = new ObjectPool(() => this.createExplosionObject(), 10);
+            
+            // Controls State
+            this.isMobile = /Android|webOS|iPhone|iPad/i.test(navigator.userAgent);
+            this.lastFireTime = 0;
+            this.fireDelay = 300; // ms
+
+            // Performance: Cache DOM element lookups
+            this.ui = {
+                score: document.getElementById('score'),
+                wave: document.getElementById('wave'),
+                cities: document.getElementById('cities'),
+                launcher: document.getElementById('launcher'),
+                viewMode: document.getElementById('viewMode'),
+                gameOver: document.getElementById('gameOver'),
+                finalScore: document.getElementById('finalScore'),
+                wavesScore: document.getElementById('wavesScore'),
+                patriotBtn: document.getElementById('patriotBtn'),
+                thaadBtn: document.getElementById('thaadBtn')
+            };
+        }
+
+        /**
+         * Initializes the entire game: scene, world, listeners, and starts the game loop.
+         */
+        init() {
+            this.setupScene();
+            this.setupWorld();
+            this.setupPostProcessing();
+            this.setupEventListeners();
+            this.updateUI();
+            
+            this.startWave();
+            this.animate(); // Start the main game loop
+        }
+
+        /**
+         * Sets up the renderer, camera, and attaches the canvas to the DOM.
+         */
+        setupScene() {
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // For better colors with bloom
+            document.getElementById('gameContainer').appendChild(this.renderer.domElement);
+            this.setViewMode('ground');
+        }
+
+        /**
+         * Adds post-processing effects like bloom for a modern look.
+         */
+        setupPostProcessing() {
+            const renderPass = new RenderPass(this.scene, this.camera);
+            // Bloom parameters: (resolution, strength, radius, threshold)
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.6);
+            
+            this.composer = new EffectComposer(this.renderer);
+            this.composer.addPass(renderPass);
+            this.composer.addPass(bloomPass);
+        }
+
+        /**
+         * Creates and adds all the initial objects to the scene (lights, ground, cities, etc.).
+         */
+        setupWorld() {
+            // Lighting: HemisphereLight provides soft, natural ambient light.
+            this.scene.add(new THREE.HemisphereLight(0x607080, 0x102030, 2.5));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            dirLight.position.set(50, 100, 50);
+            this.scene.add(dirLight);
+
+            // Background: A procedural starfield for immersion
+            const starVertices = [];
+            for (let i = 0; i < 10000; i++) {
+                starVertices.push(THREE.MathUtils.randFloatSpread(2000)); // x
+                starVertices.push(THREE.MathUtils.randFloatSpread(2000)); // y
+                starVertices.push(THREE.MathUtils.randFloatSpread(2000)); // z
+            }
+            const starGeometry = new THREE.BufferGeometry();
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const stars = new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.7 }));
+            this.scene.add(stars);
+
+            // Ground
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(200, 200),
+                new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.9 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            this.scene.add(ground);
+
+            this.createCities();
+            this.createLaunchers();
+            this.createCrosshair();
+        }
+        
+        /**
+         * Procedurally generates city clusters.
+         */
+        createCities() {
+            const positions = [[-40,0,20], [-20,0,25], [0,0,30], [20,0,25], [40,0,20], [0,0,45]];
+            positions.forEach(pos => {
+                const cityGroup = new THREE.Group();
+                for (let i = 0; i < 3; i++) {
+                    const height = 2 + Math.random() * 6;
+                    const building = new THREE.Mesh(
+                        new THREE.BoxGeometry(1 + Math.random(), height, 1 + Math.random()),
+                        new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.1, 0.3, 0.5 + Math.random() * 0.2) })
+                    );
+                    building.position.set((Math.random() - 0.5) * 6, height / 2, (Math.random() - 0.5) * 6);
+                    cityGroup.add(building);
+                }
+                cityGroup.position.set(pos[0], pos[1], pos[2]);
+                cityGroup.userData = { isCity: true, destroyed: false };
+                this.cities.push(cityGroup);
+                this.scene.add(cityGroup);
+            });
+        }
+        
+        /**
+         * Creates the player's missile launcher models.
+         */
+        createLaunchers() {
+            // Patriot Launcher
+            const patriotGroup = new THREE.Group();
+            const pBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 1, 8), new THREE.MeshStandardMaterial({ color: 0x556B2F }));
+            patriotGroup.add(pBase);
+            patriotGroup.position.set(-15, 0.5, 8);
+            this.launchers.patriot = patriotGroup;
+            this.scene.add(patriotGroup);
+            
+            // THAAD Launcher
+            const thaadGroup = new THREE.Group();
+            const tBase = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 12), new THREE.MeshStandardMaterial({ color: 0x3c3c3c }));
+            thaadGroup.add(tBase);
+            thaadGroup.position.set(15, 0.5, 8);
+            thaadGroup.visible = false;
+            this.launchers.thaad = thaadGroup;
+            this.scene.add(thaadGroup);
+        }
+
+        /**
+         * Creates the targeting reticle.
+         */
+        createCrosshair() {
+            const crosshairMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 });
+            this.crosshair = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.4, 16), crosshairMaterial);
+            this.crosshair.position.z = -50; // Initial position far away
+            this.scene.add(this.crosshair);
+        }
+
+        /**
+         * A factory function for creating missile meshes for the object pool.
+         * Using emissive materials allows them to glow with the bloom effect.
+         */
+        createMissileMesh(isEnemy, launcherType = 'patriot') {
+            const color = isEnemy ? 0xff4444 : (launcherType === 'patriot' ? 0x8888ff : 0x88ff88);
+            const mesh = new THREE.Mesh(
+                new THREE.ConeGeometry(0.2, isEnemy ? 3 : 2.5, 6),
+                new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: isEnemy ? 0.8 : 1.5 })
+            );
+            return mesh;
+        }
+
+        /**
+         * A factory function for creating explosion effect objects for the pool.
+         */
+        createExplosionObject() {
+            const explosion = {
+                light: new THREE.PointLight(0xffaa33, 0, 50), // Intensity starts at 0
+                shockwave: new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 16, 16),
+                    new THREE.MeshBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.8 })
+                ),
+                age: 0,
+                duration: 0.8,
+                active: false
+            };
+            this.scene.add(explosion.light);
+            this.scene.add(explosion.shockwave);
+            return explosion;
+        }
+
+        /**
+         * Spawns a new wave of enemy missiles.
+         */
+        startWave() {
+            if (this.gameState.isGameOver) return;
+            const count = 2 + this.gameState.wave;
+            for (let i = 0; i < count; i++) {
+                // Stagger the missile launches
+                setTimeout(() => this.spawnEnemyMissile(), i * (1200 / this.gameState.wave + 300));
+            }
+        }
+        
+        spawnEnemyMissile() {
+            if (this.gameState.isGameOver) return;
+            const mesh = this.missilePool.get();
+            if (!mesh) return; // Pool is empty
+
+            const targets = this.cities.filter(c => !c.userData.destroyed);
+            const targetCity = targets.length > 0 ? targets[Math.floor(Math.random() * targets.length)] : null;
+            if (!targetCity) { this.missilePool.release(mesh); return; }
+
+            const missile = {
+                mesh, velocity: new THREE.Vector3(), target: targetCity,
+                speed: 25 + this.gameState.wave, active: true, isEnemy: true
+            };
+
+            missile.mesh.position.set((Math.random() - 0.5) * 150, 100 + Math.random() * 20, (Math.random() - 0.5) * 100);
+            missile.velocity.subVectors(targetCity.position, missile.mesh.position).normalize().multiplyScalar(missile.speed);
+            missile.mesh.lookAt(targetCity.position);
+            
+            this.missiles.push(missile);
+            this.scene.add(missile.mesh);
+        }
+
+        /**
+         * Fires a player-controlled interceptor.
+         */
+        fireMissile(clientX, clientY) {
+            const now = performance.now();
+            if (now - this.lastFireTime < this.fireDelay || this.gameState.isGameOver) return;
+            this.lastFireTime = now;
+
+            const pool = this.interceptorPool[this.gameState.activeLauncher];
+            const mesh = pool.get();
+            if (!mesh) return;
+
+            const targetPos = this.getTargetPosition(clientX, clientY);
+            if (!targetPos) { pool.release(mesh); return; }
+
+            const interceptor = {
+                mesh, velocity: new THREE.Vector3(), speed: this.gameState.activeLauncher === 'patriot' ? 80 : 100,
+                active: true, proximityFuse: 8
+            };
+
+            const launcher = this.launchers[this.gameState.activeLauncher];
+            const startPos = launcher.position.clone().add(new THREE.Vector3(0, 2, 0));
+            interceptor.mesh.position.copy(startPos);
+            interceptor.velocity.subVectors(targetPos, startPos).normalize().multiplyScalar(interceptor.speed);
+            
+            this.interceptors.push(interceptor);
+            this.scene.add(interceptor.mesh);
+        }
+        
+        /**
+         * Activates an explosion effect from the pool at a given position.
+         */
+        spawnExplosion(position, size) {
+            const explosion = this.explosionPool.get();
+            if (!explosion) return;
+
+            explosion.active = true;
+            explosion.age = 0;
+            explosion.light.position.copy(position);
+            explosion.shockwave.position.copy(position);
+            explosion.shockwave.scale.set(1, 1, 1);
+            explosion.light.intensity = 500 * size;
+            this.explosions.push(explosion);
+        }
+
+        /**
+         * The core update function, called every frame.
+         * `deltaTime` makes physics independent of the frame rate.
+         */
+        update(deltaTime) {
+            // Update enemy missiles
+            for (let i = this.missiles.length - 1; i >= 0; i--) {
+                const missile = this.missiles[i];
+                missile.velocity.y -= 9.8 * deltaTime; // Simple gravity
+                missile.mesh.position.addScaledVector(missile.velocity, deltaTime);
+                missile.mesh.lookAt(missile.mesh.position.clone().add(missile.velocity));
+
+                if (missile.mesh.position.y <= 0) {
+                    this.spawnExplosion(missile.mesh.position, 1.5);
+                    missile.target.visible = false;
+                    missile.target.userData.destroyed = true;
+                    this.gameState.citiesRemaining--;
+                    this.deactivateObject(missile, i, this.missiles, this.missilePool);
+                    if (this.gameState.citiesRemaining <= 0) this.endGame();
+                }
+            }
+
+            // Update player interceptors
+            for (let i = this.interceptors.length - 1; i >= 0; i--) {
+                const interceptor = this.interceptors[i];
+                const closestEnemy = this.getClosestEnemy(interceptor.mesh.position);
+                
+                // Physics: Homing logic
+                if (closestEnemy) {
+                    const direction = new THREE.Vector3().subVectors(closestEnemy.mesh.position, interceptor.mesh.position).normalize();
+                    interceptor.velocity.lerp(direction.multiplyScalar(interceptor.speed), 0.1);
+                }
+                
+                interceptor.mesh.position.addScaledVector(interceptor.velocity, deltaTime);
+                interceptor.mesh.lookAt(interceptor.mesh.position.clone().add(interceptor.velocity));
+
+                // Check for interception or out of bounds
+                if (closestEnemy && interceptor.mesh.position.distanceTo(closestEnemy.mesh.position) < interceptor.proximityFuse) {
+                    this.gameState.score += 100;
+                    this.spawnExplosion(interceptor.mesh.position, 1.2);
+                    this.deactivateObject(closestEnemy, this.missiles.indexOf(closestEnemy), this.missiles, this.missilePool);
+                    this.deactivateObject(interceptor, i, this.interceptors, this.interceptorPool[this.gameState.activeLauncher]);
+                } else if (interceptor.mesh.position.length() > 500) { // Self-destruct if it flies too far
+                    this.deactivateObject(interceptor, i, this.interceptors, this.interceptorPool[this.gameState.activeLauncher]);
+                }
+            }
+
+            // Update explosions
+            for (let i = this.explosions.length - 1; i >= 0; i--) {
+                const exp = this.explosions[i];
+                exp.age += deltaTime;
+                const life = exp.age / exp.duration; // Normalized age (0 to 1)
+
+                exp.light.intensity = (1 - life) * 500;
+                exp.shockwave.scale.setScalar(life * 20);
+                exp.shockwave.material.opacity = 1 - life;
+
+                if (life >= 1) {
+                    this.explosionPool.release(exp);
+                    this.explosions.splice(i, 1);
+                }
+            }
+            
+            // Check if wave is over
+            if (this.missiles.length === 0 && !this.gameState.isGameOver) {
+                setTimeout(() => {
+                    this.gameState.wave++;
+                    this.startWave();
+                }, 2000); // 2-second delay between waves
+            }
+
+            this.updateUI();
+        }
+        
+        /**
+         * Deactivates an object, removes it from the scene, and returns it to its pool.
+         */
+        deactivateObject(obj, index, list, pool) {
+            this.scene.remove(obj.mesh);
+            pool.release(obj.mesh);
+            list.splice(index, 1);
+        }
+        
+        /**
+         * Finds the closest enemy missile to a given position.
+         * Used for interceptor homing logic.
+         */
+        getClosestEnemy(position) {
+            let closest = null;
+            let minDistance = Infinity;
+            this.missiles.forEach(missile => {
+                const distance = position.distanceTo(missile.mesh.position);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closest = missile;
+                }
+            });
+            return closest;
+        }
+
+        /**
+         * Ends the game and shows the game over screen.
+         */
+        endGame() {
+            if (this.gameState.isGameOver) return;
+            this.gameState.isGameOver = true;
+            this.ui.finalScore.textContent = this.gameState.score;
+            this.ui.wavesScore.textContent = this.gameState.wave - 1;
+            this.ui.gameOver.style.display = 'flex';
+        }
+
+        /**
+         * Updates all the text in the HUD.
+         */
+        updateUI() {
+            this.ui.score.textContent = this.gameState.score;
+            this.ui.wave.textContent = this.gameState.wave;
+            this.ui.cities.textContent = this.gameState.citiesRemaining;
+            this.ui.launcher.textContent = this.gameState.activeLauncher.toUpperCase();
+            this.ui.viewMode.textContent = this.gameState.viewMode.toUpperCase();
+        }
+        
+        /**
+         * The main animation loop, powered by requestAnimationFrame.
+         */
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            const deltaTime = this.clock.getDelta();
+            
+            if (!this.gameState.isGameOver) {
+                this.update(deltaTime);
+            }
+
+            // Render the scene through the composer to apply post-processing effects
+            this.composer.render();
+        }
+
+        /**
+         * Sets up all user input event listeners.
+         */
+        setupEventListeners() {
+            window.addEventListener('resize', () => this.onWindowResize());
+            
+            // Mouse controls
+            document.addEventListener('mousemove', e => this.updateCrosshair(e.clientX, e.clientY));
+            document.addEventListener('click', e => this.fireMissile(e.clientX, e.clientY));
+            document.addEventListener('wheel', e => this.onMouseWheel(e));
+            
+            // Button controls
+            this.ui.patriotBtn.addEventListener('click', () => this.switchLauncher('patriot'));
+            this.ui.thaadBtn.addEventListener('click', () => this.switchLauncher('thaad'));
+            document.getElementById('viewBtn').addEventListener('click', () => this.toggleViewMode());
+            document.getElementById('restartBtn').addEventListener('click', () => location.reload());
+
+            // Keyboard controls
+            document.addEventListener('keydown', e => {
+                if (e.key === '1') this.switchLauncher('patriot');
+                if (e.key === '2') this.switchLauncher('thaad');
+                if (e.key === 'v' || e.key === 'V') this.toggleViewMode();
+            });
+        }
+        
+        /**
+         * Calculates the 3D world position corresponding to the mouse's 2D screen position.
+         */
+        getTargetPosition(clientX, clientY) {
+            const mouse = new THREE.Vector2(
+                (clientX / window.innerWidth) * 2 - 1,
+                -(clientY / window.innerHeight) * 2 + 1
+            );
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, this.camera);
+            
+            // We project the target onto a plane to get a consistent depth
+            const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 20);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, target);
+            return target;
+        }
+
+        updateCrosshair(clientX, clientY) {
+            if (this.gameState.isGameOver) return;
+            const targetPos = this.getTargetPosition(clientX, clientY);
+            if (targetPos) {
+                this.crosshair.position.copy(targetPos);
+            }
+        }
+        
+        onWindowResize() {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.composer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        onMouseWheel(event) {
+            const newFOV = this.camera.fov + event.deltaY * 0.05;
+            this.camera.fov = THREE.MathUtils.clamp(newFOV, 30, 100);
+            this.camera.updateProjectionMatrix();
+        }
+
+        switchLauncher(type) {
+            if (this.gameState.activeLauncher === type) return;
+            this.gameState.activeLauncher = type;
+            this.launchers.patriot.visible = (type === 'patriot');
+            this.launchers.thaad.visible = (type === 'thaad');
+            this.ui.patriotBtn.classList.toggle('active', type === 'patriot');
+            this.ui.thaadBtn.classList.toggle('active', type === 'thaad');
+        }
+
+        toggleViewMode() {
+            this.setViewMode(this.gameState.viewMode === 'ground' ? 'overview' : 'ground');
+        }
+        
+        setViewMode(mode) {
+            this.gameState.viewMode = mode;
+            if (mode === 'ground') {
+                this.camera.position.set(0, 3, 12);
+                this.camera.rotation.set(0.2, 0, 0);
+            } else { // overview
+                this.camera.position.set(0, 60, 40);
+                this.camera.rotation.set(-0.8, 0, 0);
+            }
+        }
+    }
+
+    /**
+     * A generic Object Pool for reusing objects to improve performance.
+     * This is crucial for games to avoid stuttering from garbage collection.
+     */
+    class ObjectPool {
+        constructor(createFn, initialSize) {
+            this.createFn = createFn;
+            this.pool = [];
+            for (let i = 0; i < initialSize; i++) {
+                this.pool.push(this.createFn());
+            }
+        }
+
+        get() {
+            return this.pool.length > 0 ? this.pool.pop() : null;
+        }
+
+        release(obj) {
+            this.pool.push(obj);
+        }
+    }
+
+    // --- Entry Point ---
+    // Create an instance of the game and initialize it when the page has loaded.
+    const game = new Game();
+    window.addEventListener('load', () => game.init());
+
+</script>
+</body>
+</html>
