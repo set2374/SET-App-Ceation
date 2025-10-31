@@ -270,21 +270,54 @@ async function sendChatMessage() {
   const loadingId = addChatMessage('assistant', 'Analyzing documents with Claude Sonnet 4.5...', true);
   
   try {
-    // TODO: Call actual Claude API
-    // Simulate AI response
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Call Claude API
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: message,
+        matter_id: currentMatter,
+        selected_sources: selectedSources
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get AI response');
+    }
+    
+    const data = await response.json();
     
     // Remove loading message
-    removeChat Message(loadingId);
+    removeChatMessage(loadingId);
     
-    // Mock AI response with Bates citations
-    const mockResponse = generateMockAIResponse(message);
-    addChatMessage('assistant', mockResponse);
+    // Format response with clickable Bates citations
+    let formattedResponse = data.response;
+    
+    // Convert [BATES: VQ-000001] format to clickable links
+    formattedResponse = formattedResponse.replace(
+      /\[BATES: ([^\]]+)\]/g,
+      '<span class="bates-citation" data-bates="$1">$1</span>'
+    );
+    
+    // Add save to notes button
+    formattedResponse += '\n\n<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>';
+    
+    // Add AI response to chat
+    addChatMessage('assistant', formattedResponse);
+    
+    console.log('AI response received:', {
+      bates_citations: data.bates_citations,
+      tokens_used: data.tokens_used,
+      model: data.model
+    });
     
   } catch (error) {
     console.error('Chat error:', error);
     removeChatMessage(loadingId);
-    addChatMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+    addChatMessage('assistant', `Sorry, I encountered an error: ${error.message}. Please try again.`);
   }
 }
 
@@ -381,13 +414,28 @@ function addChatMessage(role, content, isLoading = false) {
     setTimeout(() => {
       const messageEl = document.getElementById(messageId);
       if (messageEl) {
-        // Bates citations
+        // Bates citations - make them clickable and open PDF viewer
         messageEl.querySelectorAll('.bates-citation').forEach(citation => {
-          citation.style.cssText = 'color: #2563eb; cursor: pointer; text-decoration: underline; font-weight: 600;';
-          citation.addEventListener('click', () => {
+          citation.style.cssText = 'color: #2563eb; cursor: pointer; text-decoration: underline; font-weight: 600; padding: 2px 6px; background: #eff6ff; rounded: 4px;';
+          citation.addEventListener('click', async () => {
             const bates = citation.dataset.bates;
             showNotification(`Opening ${bates}...`, 'info');
-            // TODO: Open PDF to specific page
+            
+            // Find document by Bates number
+            try {
+              const response = await fetch(`/api/documents?matter_id=${currentMatter}`);
+              const documents = await response.json();
+              const doc = documents.find(d => d.bates_start === bates || (d.bates_start <= bates && d.bates_end >= bates));
+              
+              if (doc) {
+                openPDFViewer(doc.id);
+              } else {
+                showNotification(`Document with Bates ${bates} not found`, 'error');
+              }
+            } catch (error) {
+              console.error('Error finding document:', error);
+              showNotification('Failed to open document', 'error');
+            }
           });
         });
         

@@ -303,6 +303,27 @@ app.get('/api/init-db', async (c) => {
   const { DB } = c.env
   
   try {
+    // Check if chat_history table exists
+    const chatHistoryCheck = await DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history'
+    `).first()
+    
+    if (!chatHistoryCheck) {
+      // Add chat_history table
+      await DB.prepare(`
+        CREATE TABLE IF NOT EXISTS chat_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          matter_id INTEGER NOT NULL,
+          user_message TEXT NOT NULL,
+          ai_response TEXT NOT NULL,
+          bates_citations TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      
+      return c.json({ success: true, message: 'Chat history table added' })
+    }
+    
     const check = await DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name='matters'
     `).first()
@@ -562,6 +583,116 @@ app.get('/api/document/:id', async (c) => {
       }
     })
   } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Chat with Claude Sonnet 4.5
+app.post('/api/chat', async (c) => {
+  const { DB, ANTHROPIC_API_KEY } = c.env
+  
+  try {
+    const { message, matter_id, selected_sources } = await c.req.json()
+    
+    if (!message || !message.trim()) {
+      return c.json({ error: 'Message is required' }, 400)
+    }
+    
+    if (!ANTHROPIC_API_KEY) {
+      return c.json({ error: 'Anthropic API key not configured' }, 500)
+    }
+    
+    // Get selected documents
+    let documentsContext = ''
+    if (selected_sources && selected_sources.length > 0) {
+      const placeholders = selected_sources.map(() => '?').join(',')
+      const docs = await DB.prepare(`
+        SELECT id, filename, bates_start, bates_end, extracted_text, page_count
+        FROM documents
+        WHERE id IN (${placeholders})
+      `).bind(...selected_sources).all()
+      
+      documentsContext = docs.results?.map((doc: any) => {
+        return `Document: ${doc.filename} (Bates: ${doc.bates_start}${doc.page_count > 1 ? ' - ' + doc.bates_end : ''})
+${doc.extracted_text ? 'Content: ' + doc.extracted_text.substring(0, 2000) : '[Text not yet extracted]'}`
+      }).join('\n\n---\n\n') || ''
+    }
+    
+    // Build system prompt for legal document analysis
+    const systemPrompt = `You are a legal AI assistant specializing in document review for litigation. Your role is to:
+
+1. Analyze legal documents for attorney-client privilege, work product doctrine, and other privilege claims
+2. Identify "hot documents" - evidence with significant litigation value such as:
+   - Admissions against interest
+   - Contradictory statements
+   - Smoking gun evidence
+   - Key witness communications
+   - Documents showing knowledge, intent, or consciousness of guilt
+3. Flag "bad documents" - evidence potentially harmful to the client's position
+4. Extract key facts, dates, parties, and dollar amounts
+5. Provide legal reasoning for your determinations
+
+When referencing documents, ALWAYS use their Bates numbers in this format: [BATES: VQ-000001]
+
+Be thorough but concise. Provide confidence levels (high/medium/low) for privilege determinations.
+
+Available documents for this query:
+${documentsContext || '[No documents selected - user may be asking a general question]'}`
+
+    // Call Claude API
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+        system: systemPrompt
+      })
+    })
+    
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('Claude API error:', error)
+      return c.json({ error: 'Failed to get AI response', details: error }, 500)
+    }
+    
+    const data = await response.json() as any
+    const aiResponse = data.content[0].text
+    
+    // Extract Bates citations from response
+    const batesCitations = aiResponse.match(/\[BATES: ([^\]]+)\]/g)?.map((match: string) => 
+      match.replace('[BATES: ', '').replace(']', '')
+    ) || []
+    
+    // Save to chat history
+    await DB.prepare(`
+      INSERT INTO chat_history (matter_id, user_message, ai_response, bates_citations)
+      VALUES (?, ?, ?, ?)
+    `).bind(
+      matter_id || 1,
+      message,
+      aiResponse,
+      batesCitations.join(', ') || null
+    ).run()
+    
+    return c.json({
+      response: aiResponse,
+      bates_citations: batesCitations,
+      model: 'claude-sonnet-4-20250514',
+      tokens_used: data.usage?.input_tokens + data.usage?.output_tokens || 0
+    })
+  } catch (error: any) {
+    console.error('Chat error:', error)
     return c.json({ error: error.message }, 500)
   }
 })
