@@ -454,4 +454,116 @@ app.post('/api/notes', async (c) => {
   }
 })
 
+// Upload PDF document
+app.post('/api/upload', async (c) => {
+  const { DB, DOCUMENTS } = c.env
+  
+  try {
+    const formData = await c.req.formData()
+    const file = formData.get('file') as File
+    const matterId = formData.get('matter_id') as string || '1'
+    
+    if (!file) {
+      return c.json({ error: 'No file provided' }, 400)
+    }
+    
+    if (file.type !== 'application/pdf') {
+      return c.json({ error: 'File must be a PDF' }, 400)
+    }
+    
+    // Get matter info for Bates numbering
+    const matter = await DB.prepare('SELECT * FROM matters WHERE id = ?').bind(matterId).first() as any
+    if (!matter) {
+      return c.json({ error: 'Matter not found' }, 404)
+    }
+    
+    // Calculate Bates numbers
+    const startNumber = matter.next_bates_number
+    const pageCount = 1 // TODO: Get actual page count from PDF
+    const endNumber = startNumber + pageCount - 1
+    
+    const batesStart = `${matter.bates_prefix}-${String(startNumber).padStart(6, '0')}`
+    const batesEnd = `${matter.bates_prefix}-${String(endNumber).padStart(6, '0')}`
+    
+    // Generate storage path
+    const timestamp = Date.now()
+    const storagePath = `${matterId}/${timestamp}-${file.name}`
+    
+    // Upload to R2
+    const fileBuffer = await file.arrayBuffer()
+    await DOCUMENTS.put(storagePath, fileBuffer, {
+      httpMetadata: {
+        contentType: 'application/pdf'
+      }
+    })
+    
+    // Insert document record
+    const result = await DB.prepare(`
+      INSERT INTO documents (
+        matter_id, filename, bates_start, bates_end, page_count,
+        file_size, storage_path, text_extracted, review_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, 'pending')
+    `).bind(
+      matterId,
+      file.name,
+      batesStart,
+      batesEnd,
+      pageCount,
+      file.size,
+      storagePath
+    ).run()
+    
+    // Update matter's next Bates number
+    await DB.prepare(`
+      UPDATE matters SET next_bates_number = ? WHERE id = ?
+    `).bind(endNumber + 1, matterId).run()
+    
+    return c.json({
+      success: true,
+      document: {
+        id: result.meta.last_row_id,
+        filename: file.name,
+        bates_start: batesStart,
+        bates_end: batesEnd,
+        page_count: pageCount,
+        storage_path: storagePath
+      }
+    })
+  } catch (error: any) {
+    console.error('Upload error:', error)
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Get PDF from R2 storage
+app.get('/api/document/:id', async (c) => {
+  const { DB, DOCUMENTS } = c.env
+  const docId = c.req.param('id')
+  
+  try {
+    // Get document metadata
+    const doc = await DB.prepare('SELECT * FROM documents WHERE id = ?').bind(docId).first() as any
+    if (!doc) {
+      return c.notFound()
+    }
+    
+    // Retrieve from R2
+    const object = await DOCUMENTS.get(doc.storage_path)
+    if (!object) {
+      return c.json({ error: 'Document not found in storage' }, 404)
+    }
+    
+    // Return PDF
+    return new Response(object.body, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${doc.filename}"`,
+        'Cache-Control': 'public, max-age=3600'
+      }
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
 export default app

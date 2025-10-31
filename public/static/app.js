@@ -174,26 +174,82 @@ function updateSelectedSources() {
 }
 
 // Open PDF viewer
-function openPDFViewer(docId) {
+async function openPDFViewer(docId) {
   const overlay = document.getElementById('pdf-overlay');
   if (!overlay) return;
   
-  // TODO: Load actual PDF
-  const titleEl = document.getElementById('pdf-title');
-  const batesEl = document.getElementById('pdf-bates');
-  
-  if (titleEl) titleEl.textContent = `Document ${docId}`;
-  if (batesEl) batesEl.textContent = `VQ-${String(docId).padStart(6, '0')}`;
-  
-  overlay.classList.remove('hidden');
-  
-  // Close button
-  const closeBtn = document.getElementById('close-pdf');
-  if (closeBtn) {
-    closeBtn.onclick = () => overlay.classList.add('hidden');
+  try {
+    // Find document in our list
+    const response = await fetch(`/api/documents?matter_id=${currentMatter}`);
+    const documents = await response.json();
+    const doc = documents.find(d => d.id === docId);
+    
+    if (!doc) {
+      showNotification('Document not found', 'error');
+      return;
+    }
+    
+    // Update overlay info
+    const titleEl = document.getElementById('pdf-title');
+    const batesEl = document.getElementById('pdf-bates');
+    
+    if (titleEl) titleEl.textContent = doc.filename;
+    if (batesEl) batesEl.textContent = doc.bates_start;
+    
+    // Show overlay
+    overlay.classList.remove('hidden');
+    
+    // Load PDF content
+    const pdfContent = document.getElementById('pdf-content');
+    if (pdfContent) {
+      pdfContent.innerHTML = `
+        <div class="flex items-center justify-center h-full">
+          <div class="text-center">
+            <div class="spinner mb-4"></div>
+            <p class="text-sm text-gray-600">Loading PDF...</p>
+          </div>
+        </div>
+      `;
+      
+      // Use PDF.js to render (we'll add this library via CDN)
+      try {
+        const pdfUrl = `/api/document/${docId}`;
+        
+        // For now, use iframe as fallback
+        pdfContent.innerHTML = `
+          <iframe 
+            src="${pdfUrl}" 
+            class="w-full h-full border-0"
+            title="${escapeHtml(doc.filename)}"
+          ></iframe>
+        `;
+        
+        showNotification('PDF loaded successfully', 'success');
+      } catch (error) {
+        console.error('PDF rendering error:', error);
+        pdfContent.innerHTML = `
+          <div class="flex items-center justify-center h-full">
+            <div class="text-center text-red-600">
+              <svg class="mx-auto h-12 w-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="text-sm">Failed to load PDF</p>
+              <p class="text-xs mt-1">${error.message}</p>
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    // Close button
+    const closeBtn = document.getElementById('close-pdf');
+    if (closeBtn) {
+      closeBtn.onclick = () => overlay.classList.add('hidden');
+    }
+  } catch (error) {
+    console.error('Error opening PDF viewer:', error);
+    showNotification('Failed to open PDF viewer', 'error');
   }
-  
-  showNotification('PDF viewer integration coming soon', 'info');
 }
 
 // Send chat message
@@ -495,13 +551,28 @@ async function handleFileUpload(event) {
     }
     
     try {
-      // TODO: Implement actual upload to R2
-      console.log('Uploading file:', file.name);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      showNotification(`${file.name} uploaded successfully`, 'success');
+      // Create FormData
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('matter_id', currentMatter.toString());
+      
+      // Upload to server
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+      
+      const result = await response.json();
+      console.log('Upload successful:', result);
+      showNotification(`${file.name} uploaded - Bates: ${result.document.bates_start}`, 'success');
     } catch (error) {
       console.error('Upload error:', error);
-      showNotification(`Failed to upload ${file.name}`, 'error');
+      showNotification(`Failed to upload ${file.name}: ${error.message}`, 'error');
     }
   }
   
