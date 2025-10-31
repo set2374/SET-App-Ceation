@@ -9,15 +9,14 @@
   "r2_buckets": [
     {
       "binding": "DOCUMENTS",
-      "bucket_name": "tls-ediscovery-documents"
+      "bucket_name": "tlsediscoverydata"
     }
   ],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "tls-ediscovery-production",
-      "database_id": "",
-      "migrations_dir": "migrations"
+      "database_name": "tls-ediscovery-database",
+      "database_id": "ddfaefee-f71c-47c8-b729-de7c2ffedc65"
     }
   ]
 }
