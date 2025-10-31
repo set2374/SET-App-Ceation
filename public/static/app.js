@@ -559,30 +559,231 @@ function showAddNoteDialog() {
 }
 
 // Generate privilege log
-function generatePrivilegeLog() {
+async function generatePrivilegeLog() {
   showNotification('Generating privilege log with clickable Bates hyperlinks...', 'info');
-  // TODO: Implement actual privilege log generation
-  setTimeout(() => {
-    showNotification('Privilege log generated! (Feature coming soon)', 'success');
-  }, 1500);
+  
+  try {
+    const response = await fetch('/api/reports/privilege-log', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        matter_id: currentMatter
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to generate privilege log');
+    }
+    
+    // Check if it's a CSV file
+    const contentType = response.headers.get('Content-Type');
+    if (contentType && contentType.includes('text/csv')) {
+      // Download CSV file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'privilege-log.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      showNotification('Privilege log downloaded successfully! Open in Excel to see clickable Bates hyperlinks.', 'success');
+    } else {
+      const result = await response.json();
+      if (!result.success) {
+        showNotification(result.message || 'No privileged documents found', 'error');
+      }
+    }
+  } catch (error) {
+    console.error('Privilege log error:', error);
+    showNotification('Failed to generate privilege log: ' + error.message, 'error');
+  }
 }
 
 // Generate timeline
-function generateTimeline() {
+async function generateTimeline() {
   showNotification('Creating chronological timeline...', 'info');
-  // TODO: Implement actual timeline generation
-  setTimeout(() => {
-    showNotification('Timeline generated! (Feature coming soon)', 'success');
-  }, 1500);
+  
+  try {
+    const response = await fetch('/api/reports/timeline', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        matter_id: currentMatter
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate timeline');
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showNotification(data.message || 'No documents found for timeline', 'error');
+      return;
+    }
+    
+    // Display timeline in a modal or new view
+    displayTimelineModal(data.timeline);
+    showNotification(`Timeline created with ${data.timeline.total_documents} documents`, 'success');
+  } catch (error) {
+    console.error('Timeline error:', error);
+    showNotification('Failed to generate timeline: ' + error.message, 'error');
+  }
 }
 
 // Generate hot document report
-function generateHotDocReport() {
+async function generateHotDocReport() {
   showNotification('Compiling hot documents report...', 'info');
-  // TODO: Implement actual hot doc report
-  setTimeout(() => {
-    showNotification('Hot documents report generated! (Feature coming soon)', 'success');
-  }, 1500);
+  
+  try {
+    const response = await fetch('/api/reports/hot-documents', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        matter_id: currentMatter
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate hot documents report');
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showNotification(data.message || 'No hot documents identified yet', 'error');
+      return;
+    }
+    
+    // Display hot documents report
+    displayHotDocsModal(data);
+    showNotification(`Hot documents report: ${data.total_count} critical documents identified`, 'success');
+  } catch (error) {
+    console.error('Hot docs report error:', error);
+    showNotification('Failed to generate hot documents report: ' + error.message, 'error');
+  }
+}
+
+// Display timeline modal
+function displayTimelineModal(timeline) {
+  const modalHTML = `
+    <div id="timeline-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="this.remove()">
+      <div class="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-auto m-4" onclick="event.stopPropagation()">
+        <div class="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h2 class="text-xl font-semibold text-gray-900">📅 Document Timeline</h2>
+          <button onclick="document.getElementById('timeline-modal').remove()" class="text-gray-500 hover:text-gray-700">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            ${timeline.documents.map((doc, idx) => `
+              <div class="flex">
+                <div class="flex-shrink-0 w-24 text-right pr-4 text-sm text-gray-500">
+                  ${formatDate(doc.upload_date)}
+                </div>
+                <div class="flex-shrink-0 w-2 relative">
+                  <div class="h-full w-0.5 bg-blue-200 absolute left-1/2 transform -translate-x-1/2"></div>
+                  <div class="w-2 h-2 bg-blue-600 rounded-full absolute left-1/2 top-2 transform -translate-x-1/2"></div>
+                </div>
+                <div class="flex-1 pl-4 pb-8">
+                  <div class="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 transition-colors cursor-pointer" onclick="openPDFViewer(${doc.id})">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1">
+                        <p class="font-medium text-gray-900">${escapeHtml(doc.filename)}</p>
+                        <p class="text-sm text-blue-600 font-mono mt-1">${doc.bates_start}</p>
+                        ${doc.classifications ? `<div class="flex gap-2 mt-2">
+                          ${doc.classifications.split(',').map(cls => `<span class="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">${cls}</span>`).join('')}
+                        </div>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+// Display hot documents modal
+function displayHotDocsModal(data) {
+  const modalHTML = `
+    <div id="hotdocs-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="this.remove()">
+      <div class="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-auto m-4" onclick="event.stopPropagation()">
+        <div class="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-red-50 to-orange-50">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">🔥 Hot Documents Report</h2>
+            <p class="text-sm text-gray-600 mt-1">${data.matter} - ${data.total_count} critical documents identified</p>
+          </div>
+          <button onclick="document.getElementById('hotdocs-modal').remove()" class="text-gray-500 hover:text-gray-700">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            ${data.hot_documents.map((doc, idx) => `
+              <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-4">
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🔥</span>
+                    <div>
+                      <p class="font-semibold text-gray-900">${doc.filename}</p>
+                      <p class="text-sm text-blue-600 font-mono">Bates: ${doc.bates_number}</p>
+                    </div>
+                  </div>
+                  ${doc.confidence ? `<span class="text-xs px-2 py-1 bg-red-600 text-white rounded font-medium">Confidence: ${Math.round(doc.confidence * 100)}%</span>` : ''}
+                </div>
+                <div class="bg-white rounded p-3 mb-3">
+                  <p class="text-sm text-gray-700 font-medium mb-1">Legal Significance:</p>
+                  <p class="text-sm text-gray-600">${doc.justification || 'Critical litigation evidence'}</p>
+                </div>
+                <div class="flex space-x-2">
+                  <a href="${doc.link}" class="text-sm text-blue-600 hover:text-blue-700 font-medium">View Document →</a>
+                  <button onclick="openPDFViewer(${idx + 1})" class="text-sm text-gray-600 hover:text-gray-700">Open in Viewer</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          
+          ${data.notes.length > 0 ? `
+            <div class="mt-6 pt-6 border-t border-gray-200">
+              <h3 class="text-sm font-semibold text-gray-900 mb-3">Related Notes</h3>
+              <div class="space-y-2">
+                ${data.notes.slice(0, 5).map(note => `
+                  <div class="bg-yellow-50 border border-yellow-200 rounded p-3">
+                    <p class="text-sm text-gray-800">${escapeHtml(note.note_text.substring(0, 150))}${note.note_text.length > 150 ? '...' : ''}</p>
+                    ${note.bates_references ? `<p class="text-xs text-blue-600 font-mono mt-1">${note.bates_references}</p>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
 
 // Handle file upload

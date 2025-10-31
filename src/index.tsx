@@ -320,8 +320,56 @@ app.get('/api/init-db', async (c) => {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `).run()
+    }
+    
+    // Check if document_classifications table exists
+    const docClassCheck = await DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='document_classifications'
+    `).first()
+    
+    if (!docClassCheck) {
+      // Add document_classifications table
+      await DB.prepare(`
+        CREATE TABLE IF NOT EXISTS document_classifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          document_id INTEGER NOT NULL,
+          classification_id INTEGER NOT NULL,
+          confidence_score REAL,
+          ai_suggested BOOLEAN DEFAULT FALSE,
+          attorney_confirmed BOOLEAN DEFAULT FALSE,
+          justification TEXT,
+          created_by TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
       
-      return c.json({ success: true, message: 'Chat history table added' })
+      await DB.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_doc_class_document ON document_classifications(document_id)
+      `).run()
+      
+      return c.json({ success: true, message: 'Document classifications table added' })
+    }
+    
+    // Check if notes table exists
+    const notesCheck = await DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='notes'
+    `).first()
+    
+    if (!notesCheck) {
+      // Add notes table
+      await DB.prepare(`
+        CREATE TABLE IF NOT EXISTS notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          note_text TEXT NOT NULL,
+          bates_references TEXT,
+          source TEXT DEFAULT 'manual',
+          created_by TEXT DEFAULT 'Stephen Turman',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      
+      return c.json({ success: true, message: 'Notes table added' })
     }
     
     const check = await DB.prepare(`
@@ -581,6 +629,160 @@ app.get('/api/document/:id', async (c) => {
         'Content-Disposition': `inline; filename="${doc.filename}"`,
         'Cache-Control': 'public, max-age=3600'
       }
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Generate Privilege Log
+app.post('/api/reports/privilege-log', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    const { matter_id } = await c.req.json()
+    const matterId = matter_id || 1
+    
+    // Get all documents classified as privileged
+    const privilegedDocs = await DB.prepare(`
+      SELECT d.*, dc.justification, dc.created_at as classification_date
+      FROM documents d
+      LEFT JOIN document_classifications dc ON d.id = dc.document_id
+      LEFT JOIN classifications c ON dc.classification_id = c.id
+      WHERE d.matter_id = ? AND c.name = 'Privileged'
+      ORDER BY d.bates_start
+    `).bind(matterId).all()
+    
+    if (!privilegedDocs.results || privilegedDocs.results.length === 0) {
+      return c.json({ 
+        success: false, 
+        message: 'No privileged documents found',
+        count: 0
+      })
+    }
+    
+    // Generate CSV format with hyperlinks
+    const matter = await DB.prepare('SELECT * FROM matters WHERE id = ?').bind(matterId).first() as any
+    const baseUrl = new URL(c.req.url).origin
+    
+    let csv = 'Bates Number,Date,From,To,Subject,Privilege Type,Description,Link\n'
+    
+    for (const doc of privilegedDocs.results as any[]) {
+      const batesLink = `${baseUrl}/document/view?bates=${doc.bates_start}`
+      csv += `"${doc.bates_start}","${doc.upload_date || 'N/A'}","N/A","N/A","${doc.filename}","Attorney-Client Privilege","${doc.justification || 'Privileged communication'}","${batesLink}"\n`
+    }
+    
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="${matter?.name || 'Matter'}-Privilege-Log-${Date.now()}.csv"`
+      }
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Generate Timeline
+app.post('/api/reports/timeline', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    const { matter_id } = await c.req.json()
+    const matterId = matter_id || 1
+    
+    // Get all documents with dates, sorted chronologically
+    const documents = await DB.prepare(`
+      SELECT d.*, 
+             GROUP_CONCAT(DISTINCT c.name) as classifications
+      FROM documents d
+      LEFT JOIN document_classifications dc ON d.id = dc.document_id
+      LEFT JOIN classifications c ON dc.classification_id = c.id
+      WHERE d.matter_id = ?
+      GROUP BY d.id
+      ORDER BY d.upload_date ASC
+    `).bind(matterId).all()
+    
+    if (!documents.results || documents.results.length === 0) {
+      return c.json({ 
+        success: false, 
+        message: 'No documents found for timeline',
+        count: 0
+      })
+    }
+    
+    // Extract timeline events from chat history
+    const chatEvents = await DB.prepare(`
+      SELECT user_message, ai_response, bates_citations, created_at
+      FROM chat_history
+      WHERE matter_id = ? AND bates_citations IS NOT NULL
+      ORDER BY created_at ASC
+    `).bind(matterId).all()
+    
+    return c.json({
+      success: true,
+      timeline: {
+        documents: documents.results,
+        events: chatEvents.results || [],
+        total_documents: documents.results.length
+      }
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Generate Hot Documents Report
+app.post('/api/reports/hot-documents', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    const { matter_id } = await c.req.json()
+    const matterId = matter_id || 1
+    
+    // Get all documents classified as Hot Document
+    const hotDocs = await DB.prepare(`
+      SELECT d.*, dc.justification, dc.confidence_score, dc.created_at as classification_date
+      FROM documents d
+      INNER JOIN document_classifications dc ON d.id = dc.document_id
+      INNER JOIN classifications c ON dc.classification_id = c.id
+      WHERE d.matter_id = ? AND c.name = 'Hot Document'
+      ORDER BY dc.confidence_score DESC, d.bates_start ASC
+    `).bind(matterId).all()
+    
+    // Get related notes
+    const notes = await DB.prepare(`
+      SELECT * FROM notes 
+      WHERE bates_references IS NOT NULL
+      ORDER BY created_at DESC
+    `).all()
+    
+    if (!hotDocs.results || hotDocs.results.length === 0) {
+      return c.json({ 
+        success: false, 
+        message: 'No hot documents identified yet',
+        count: 0
+      })
+    }
+    
+    // Generate report data
+    const matter = await DB.prepare('SELECT * FROM matters WHERE id = ?').bind(matterId).first() as any
+    const baseUrl = new URL(c.req.url).origin
+    
+    return c.json({
+      success: true,
+      matter: matter?.name || 'Unknown Matter',
+      hot_documents: hotDocs.results.map((doc: any) => ({
+        bates_number: doc.bates_start,
+        filename: doc.filename,
+        justification: doc.justification,
+        confidence: doc.confidence_score,
+        link: `${baseUrl}/document/view?bates=${doc.bates_start}`,
+        classification_date: doc.classification_date
+      })),
+      notes: notes.results || [],
+      total_count: hotDocs.results.length,
+      generated_at: new Date().toISOString()
     })
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
