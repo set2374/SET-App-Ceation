@@ -19,9 +19,9 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 
 ## URLs
 
+- **Production**: https://c9ce2d57.tls-ediscovery.pages.dev (LIVE)
 - **Local Development**: http://localhost:3000
 - **Sandbox**: https://3000-iv0z4oopp52b5y23h8w7n-ad490db5.sandbox.novita.ai
-- **Production** (when deployed): Will be at https://tls-ediscovery.pages.dev
 
 ## Technology Stack
 
@@ -485,5 +485,5 @@ For internal use only.
 ---
 
 **Last Updated**: October 31, 2025  
-**Version**: 0.3.0 (Alpha - Core Features Complete)  
-**Status**: ✅ Priorities A, B, C Complete | Ready for Classification UI, OCR, or Production Deployment
+**Version**: 1.0.0 (Production)  
+**Status**: ✅ DEPLOYED TO PRODUCTION | All Core Features Complete | Ready for VitaQuest Document Testing
