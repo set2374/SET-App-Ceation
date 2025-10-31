@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('TLS eDiscovery Platform (NotebookLM style) initializing...');
   
   // Load initial data
+  await loadMatters();
   await loadNotes();
   await loadDocuments();
   
@@ -97,6 +98,42 @@ function setupEventListeners() {
   const addManualNoteBtn = document.getElementById('add-manual-note');
   if (addManualNoteBtn) {
     addManualNoteBtn.addEventListener('click', showAddNoteDialog);
+  }
+  
+  // Create matter button
+  const createMatterBtn = document.getElementById('create-matter-btn');
+  if (createMatterBtn) {
+    createMatterBtn.addEventListener('click', showCreateMatterModal);
+  }
+  
+  // Create matter modal buttons
+  const cancelCreateMatterBtn = document.getElementById('cancel-create-matter');
+  const submitCreateMatterBtn = document.getElementById('submit-create-matter');
+  
+  if (cancelCreateMatterBtn) {
+    cancelCreateMatterBtn.addEventListener('click', hideCreateMatterModal);
+  }
+  
+  if (submitCreateMatterBtn) {
+    submitCreateMatterBtn.addEventListener('click', submitCreateMatter);
+  }
+  
+  // Matter selector change
+  const matterSelector = document.getElementById('matter-selector');
+  if (matterSelector) {
+    matterSelector.addEventListener('change', async (e) => {
+      currentMatter = parseInt(e.target.value);
+      await loadDocuments();
+      showNotification(`Switched to ${e.target.options[e.target.selectedIndex].text}`, 'success');
+    });
+  }
+  
+  // Auto-uppercase Bates prefix input
+  const prefixInput = document.getElementById('new-matter-prefix');
+  if (prefixInput) {
+    prefixInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+    });
   }
 }
 
@@ -853,3 +890,119 @@ function formatDate(dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+// ============================================
+// MATTER MANAGEMENT
+// ============================================
+
+// Load matters and populate selector
+async function loadMatters() {
+  try {
+    const response = await fetch('/api/matters');
+    const matters = await response.json();
+    
+    const selector = document.getElementById('matter-selector');
+    if (!selector) return;
+    
+    selector.innerHTML = matters.map(matter => 
+      `<option value="${matter.id}">${matter.name} (${matter.bates_prefix})</option>`
+    ).join('');
+    
+    // Set current matter to first in list if exists
+    if (matters.length > 0) {
+      currentMatter = matters[0].id;
+    }
+    
+    console.log('Loaded matters:', matters);
+  } catch (error) {
+    console.error('Error loading matters:', error);
+    showNotification('Failed to load matters', 'error');
+  }
+}
+
+// Show create matter modal
+function showCreateMatterModal() {
+  const modal = document.getElementById('create-matter-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    // Clear previous inputs
+    document.getElementById('new-matter-name').value = '';
+    document.getElementById('new-matter-prefix').value = '';
+    document.getElementById('new-matter-description').value = '';
+    // Focus on name input
+    setTimeout(() => document.getElementById('new-matter-name').focus(), 100);
+  }
+}
+
+// Hide create matter modal
+function hideCreateMatterModal() {
+  const modal = document.getElementById('create-matter-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+// Submit new matter
+async function submitCreateMatter() {
+  const name = document.getElementById('new-matter-name').value.trim();
+  const prefix = document.getElementById('new-matter-prefix').value.trim().toUpperCase();
+  const description = document.getElementById('new-matter-description').value.trim();
+  
+  // Validation
+  if (!name) {
+    showNotification('Please enter a matter name', 'error');
+    return;
+  }
+  
+  if (!prefix) {
+    showNotification('Please enter a Bates prefix', 'error');
+    return;
+  }
+  
+  if (prefix.length < 2 || prefix.length > 6) {
+    showNotification('Bates prefix must be 2-6 letters', 'error');
+    return;
+  }
+  
+  if (!/^[A-Z]+$/.test(prefix)) {
+    showNotification('Bates prefix must contain only letters', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/matters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, bates_prefix: prefix, description })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      showNotification(data.error || 'Failed to create matter', 'error');
+      return;
+    }
+    
+    // Success
+    showNotification(`Matter "${name}" created successfully!`, 'success');
+    hideCreateMatterModal();
+    
+    // Reload matters and switch to new matter
+    await loadMatters();
+    currentMatter = data.matter.id;
+    document.getElementById('matter-selector').value = data.matter.id;
+    await loadDocuments();
+    
+  } catch (error) {
+    console.error('Error creating matter:', error);
+    showNotification('Failed to create matter', 'error');
+  }
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('create-matter-modal');
+  if (modal && e.target === modal) {
+    hideCreateMatterModal();
+  }
+});

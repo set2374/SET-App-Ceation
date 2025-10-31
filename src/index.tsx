@@ -38,6 +38,12 @@ app.get('/', (c) => {
             <select id="matter-selector" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="1">VitaQuest Matter</option>
             </select>
+            <button id="create-matter-btn" class="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>New Matter</span>
+            </button>
             <div class="flex items-center space-x-2 text-sm text-gray-700">
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
@@ -292,6 +298,54 @@ app.get('/', (c) => {
         </div>
 
       </div>
+
+      {/* Create Matter Modal */}
+      <div id="create-matter-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Create New Matter</h3>
+          </div>
+          <div class="px-6 py-4 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Matter Name *</label>
+              <input 
+                type="text" 
+                id="new-matter-name" 
+                placeholder="e.g., Smith v. Jones, Estate of Brown"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Bates Prefix * (2-6 letters)</label>
+              <input 
+                type="text" 
+                id="new-matter-prefix" 
+                placeholder="e.g., SJ, ABC, BROWN"
+                maxlength="6"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+              />
+              <p class="text-xs text-gray-500 mt-1">Documents will be numbered: PREFIX-000001, PREFIX-000002, etc.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+              <textarea 
+                id="new-matter-description" 
+                rows="3"
+                placeholder="Brief description of the matter..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              ></textarea>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button id="cancel-create-matter" class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancel
+            </button>
+            <button id="submit-create-matter" class="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              Create Matter
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 })
@@ -464,6 +518,47 @@ app.get('/api/matters', async (c) => {
   try {
     const matters = await DB.prepare('SELECT * FROM matters ORDER BY created_at DESC').all()
     return c.json(matters.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+app.post('/api/matters', async (c) => {
+  const { DB } = c.env
+  try {
+    const { name, description, bates_prefix } = await c.req.json()
+    
+    // Validate required fields
+    if (!name || !bates_prefix) {
+      return c.json({ error: 'Matter name and Bates prefix are required' }, 400)
+    }
+    
+    // Validate Bates prefix format (letters only, 2-6 characters)
+    if (!/^[A-Z]{2,6}$/.test(bates_prefix)) {
+      return c.json({ error: 'Bates prefix must be 2-6 uppercase letters (e.g., VQ, SJ, ABC)' }, 400)
+    }
+    
+    // Check if Bates prefix already exists
+    const existingPrefix = await DB.prepare(
+      'SELECT id FROM matters WHERE bates_prefix = ?'
+    ).bind(bates_prefix).first()
+    
+    if (existingPrefix) {
+      return c.json({ error: `Bates prefix "${bates_prefix}" is already in use. Please choose a different prefix.` }, 400)
+    }
+    
+    // Insert new matter
+    const result = await DB.prepare(`
+      INSERT INTO matters (name, description, bates_prefix, bates_format, next_bates_number)
+      VALUES (?, ?, ?, ?, 1)
+    `).bind(name, description || '', bates_prefix, `${bates_prefix}-SEQUENCE`).run()
+    
+    // Fetch the newly created matter
+    const newMatter = await DB.prepare(
+      'SELECT * FROM matters WHERE id = ?'
+    ).bind(result.meta.last_row_id).first()
+    
+    return c.json({ success: true, matter: newMatter })
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
   }
