@@ -81,76 +81,114 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 
 ## Current Status
 
-### ✅ Completed Features
+### ✅ Completed Features (Priorities A, B, C)
 
 1. **Project Foundation**
    - Hono + Cloudflare Pages architecture
    - PM2 process management for development
    - Git repository with version control
-   - Comprehensive database schema with migrations
+   - Comprehensive database schema with dynamic provisioning
 
-2. **Three-Panel Interface**
-   - Left Panel: Document library with upload area, search, and filters
-   - Center Panel: PDF viewer placeholder with navigation controls
-   - Right Panel: Tabbed interface for AI Analysis, Notes, and Classifications
+2. **Three-Panel NotebookLM Interface**
+   - Left Panel: Document sources library with checkboxes, PDF viewer, and upload controls
+   - Center Panel: Conversational AI chat interface with Claude Sonnet 4.5
+   - Right Panel: Notes section and Reports generation controls
    - Responsive design with TailwindCSS styling
+   - Clean, modern UI matching NotebookLM design patterns
 
 3. **Database Implementation**
    - D1 database with complete schema
-   - API endpoints for matters, documents, classifications
-   - Database initialization endpoint (`/api/init-db`)
-   - VitaQuest test matter pre-configured
+   - Dynamic table provisioning via `/api/init-db` endpoint
+   - Tables: matters, documents, document_pages, classifications, document_classifications, notes, chat_history
+   - VitaQuest test matter pre-configured with Bates prefix "VQ"
+   - API endpoints for matters, documents, classifications, chat, and reports
 
 4. **Classification System**
    - Six pre-defined classification categories with icons and colors
-   - Classification API endpoint functional
-   - UI for selecting and displaying classifications
+   - Hot Document (red flame) - litigation-significant evidence
+   - Privileged (purple shield) - attorney-client privilege protection
+   - Bad Document (amber warning) - potentially harmful evidence
+   - Key Witness (green user) - documents referencing critical witnesses
+   - Exhibit (blue file) - likely trial exhibits
+   - Needs Review (gray eye) - requires senior attorney examination
 
-### 🚧 In Progress
+5. **Priority B: PDF Upload and Viewing System** ✅
+   - File upload with drag-and-drop support
+   - R2 object storage integration
+   - Automatic Bates number assignment based on matter configuration
+   - Sequential Bates numbering with page count tracking (e.g., VQ-000001 to VQ-000015 for 15-page PDF)
+   - Storage path organization by matter (`matter-1/VQ-000001-VQ-000015.pdf`)
+   - Document metadata tracking in D1 database
+   - PDF viewer in left panel with browser-native rendering
+   - Clickable document cards and Bates citations open specific PDFs
+   - Upload progress notifications
 
-5. **Document Upload System**
-   - File upload UI implemented
-   - Backend integration with R2 storage pending
-   - Bates number assignment logic pending
-   - OCR text extraction integration pending
+6. **Priority A: Claude Sonnet 4.5 AI Integration** ✅
+   - Anthropic Claude API integration with claude-sonnet-4-20250514 model
+   - Conversational AI interface in center panel
+   - Source document selection via checkboxes for context-aware analysis
+   - Legal-specific system prompts for privilege detection and hot document identification
+   - Automatic Bates number citations in format [BATES: VQ-000001]
+   - Clickable Bates citations that open corresponding PDFs in viewer
+   - Chat history persistence to database with Bates reference tracking
+   - 200K token context windows for document analysis
+   - Markdown rendering of AI responses
+   - Professional legal analysis with confidence levels
+
+7. **Priority C: Reports Generation System** ✅
+   - Three automated report types with proper error handling
+   - **Privilege Log**: CSV export with hyperlinked Bates numbers, document dates, authors, recipients, subjects, privilege types, and justifications
+   - **Timeline Report**: Chronological document sequencing with classification badges and event tracking
+   - **Hot Documents Report**: Compilation of litigation-critical evidence with AI confidence scores and legal significance justifications
+   - Modal displays for timeline and hot documents with clickable Bates links
+   - CSV download functionality with court-compliant formatting
+   - Empty state handling for matters without classified documents
+   - API endpoints: `/api/reports/privilege-log`, `/api/reports/timeline`, `/api/reports/hot-documents`
+
+8. **Notes System**
+   - Notes table with Bates references, source tracking, and timestamp
+   - Integration with chat history for AI-generated insights
+   - Note display in right panel
+   - Created_by tracking for attorney identification
 
 ### ⏳ Pending Features
 
-6. **PDF Viewer Integration**
-   - PDF.js library integration
-   - Page navigation with Bates number display
-   - Zoom controls and page rendering
+9. **Classification Workflow UI**
+   - Interactive classification badge clicks on document cards
+   - Bulk classification operations
+   - AI-suggested classifications with attorney confirmation workflow
+   - Confidence score display and justification entry
 
-7. **Claude Sonnet 4.5 AI Integration**
-   - Anthropic API key configuration
-   - Privilege detection analysis endpoint
-   - Hot document identification logic
-   - Document summarization
-   - Entity extraction (people, dates, amounts)
+10. **OCR Text Extraction**
+    - Cloud OCR API integration (AWS Textract, Google Document AI, or Adobe Extract)
+    - Extracted text storage in documents.extracted_text column
+    - Full-text search across document contents
+    - Enhanced Claude analysis with actual document text (not just metadata)
 
-8. **Note System**
-   - Note creation, editing, deletion
-   - Page-specific annotation coordinates
-   - AI-generated notes with accept/reject workflow
-   - Cross-document note references
-
-9. **Privilege Log Automation**
-   - Privilege log data structure completion
-   - Excel export with hyperlinked Bates numbers
-   - Court-compliant formatting
-   - Batch privilege tagging
-
-10. **Search Functionality**
+11. **Search Functionality**
     - Full-text search across extracted document text
     - Note content search
     - Bates number lookup
     - Advanced filtering by classification, date range, matter
+    - Search results highlighting
 
-11. **Deployment**
+12. **Production Deployment**
     - Cloudflare Pages production deployment
-    - Environment variable configuration
-    - Custom domain setup
-    - Production D1 database creation
+    - Production D1 database creation and migration
+    - R2 bucket configuration
+    - Environment variable and secret configuration
+    - Custom domain setup (optional)
+
+13. **Multi-User Authentication**
+    - User authentication (Cloudflare Access, Auth0, or Clerk)
+    - Role-based access control (attorney, paralegal, client)
+    - User tracking for created_by fields
+    - Audit trail enforcement
+
+14. **Logo Integration**
+    - Turman Legal Solutions logo in header
+    - Asset upload to public/static/
+    - Header HTML modification
 
 ## Development Guide
 
@@ -212,14 +250,28 @@ pm2 delete tls-ediscovery          # Remove from PM2
 
 ### API Endpoints
 
-- `GET /` - Main dashboard interface
-- `GET /api/init-db` - Initialize database schema (run once)
+**Core Functionality**
+- `GET /` - Main dashboard with three-panel NotebookLM interface
+- `GET /api/init-db` - Initialize/provision database tables dynamically
+
+**Matter Management**
 - `GET /api/matters` - List all matters
+
+**Document Operations**
 - `GET /api/documents?matter_id=1` - List documents for matter
-- `GET /api/classifications` - List classification categories
-- `POST /api/documents` - Upload document (pending)
-- `POST /api/notes` - Create note (pending)
-- `POST /api/analyze` - AI analysis (pending)
+- `POST /api/upload` - Upload PDF with automatic Bates numbering
+- `GET /api/documents/:id/download` - Download PDF from R2 storage
+
+**AI Integration**
+- `POST /api/chat` - Claude Sonnet 4.5 conversational analysis with Bates citations
+
+**Classifications**
+- `GET /api/classifications` - List classification categories (Hot Document, Privileged, etc.)
+
+**Reports Generation**
+- `POST /api/reports/privilege-log` - Generate CSV privilege log with hyperlinked Bates
+- `POST /api/reports/timeline` - Generate chronological document timeline JSON
+- `POST /api/reports/hot-documents` - Generate hot documents report with confidence scores
 
 ## Configuration
 
@@ -289,52 +341,75 @@ npx wrangler pages secret put ANTHROPIC_API_KEY --project-name tls-ediscovery
 3. Generate Excel privilege log with clickable Bates number hyperlinks
 4. Each hyperlink opens the platform to the specific document and page
 
-## Next Development Steps
+## Completed Development Phases
 
-### Priority 1: Document Upload (Week 2)
-- Implement R2 storage integration
-- Build Bates number assignment logic
-- Integrate cloud OCR API for text extraction
-- Create upload progress tracking
+### ✅ Priority B: PDF Upload and Viewing (COMPLETE)
+- R2 storage integration implemented
+- Bates number assignment logic functional
+- Upload progress tracking with notifications
+- PDF viewer with browser-native rendering
+- Clickable Bates citations opening specific documents
 
-### Priority 2: PDF Viewer (Week 2-3)
-- Integrate PDF.js library
-- Implement page rendering and navigation
-- Add zoom controls
-- Display Bates numbers per page
+### ✅ Priority A: Claude Sonnet 4.5 Integration (COMPLETE)
+- Anthropic API connection configured
+- Conversational AI interface in center panel
+- Privilege detection analysis with legal prompts
+- Hot document identification logic
+- Automatic Bates citation generation [BATES: VQ-000001]
+- Chat history persistence with Bates tracking
 
-### Priority 3: AI Integration (Week 3-4)
-- Configure Anthropic API connection
-- Build privilege detection analysis
-- Implement hot document identification
-- Create document summarization
-- Extract entities (people, dates, amounts)
+### ✅ Priority C: Reports Generation (COMPLETE)
+- Privilege log CSV export with hyperlinked Bates numbers
+- Timeline report with chronological document sequencing
+- Hot documents report with confidence scores and justifications
+- Modal displays for interactive report viewing
+- All endpoints tested and functional
 
-### Priority 4: Note System (Week 4)
-- Build note CRUD operations
-- Implement page-specific annotations
-- Create AI note suggestion workflow
-- Add cross-document references
+## Recommended Next Steps
 
-### Priority 5: Privilege Log & Export (Week 5)
-- Complete privilege log data structure
-- Build Excel export with hyperlinks
-- Implement Bates number link resolution
-- Add hot document report generation
+### Priority D: Classification Workflow UI
+- Add click-to-classify interactions on document cards
+- Build classification badge selection interface
+- Implement bulk classification operations
+- Create AI-suggested classification acceptance workflow
+- Add confidence score displays and justification text fields
+- Enable attorney confirmation of AI classifications
 
-### Priority 6: Search & Filters (Week 5-6)
-- Full-text search across documents
-- Note content search
-- Bates number lookup
-- Classification filters
-- Date range filters
+### Priority E: OCR Text Extraction
+- Integrate cloud OCR API (AWS Textract, Google Document AI, or Adobe Extract)
+- Store extracted text in documents.extracted_text column
+- Enable full-text search across document contents
+- Enhance Claude analysis with actual document text (not just metadata)
+- Add text extraction status indicators
 
-### Priority 7: Production Deployment (Week 6)
-- Create production D1 database
-- Configure Cloudflare Pages project
-- Set up environment variables
-- Deploy to production
-- Configure custom domain
+### Priority F: Search and Filtering
+- Full-text search across extracted document content
+- Note content search across saved insights
+- Bates number quick lookup
+- Classification-based filtering (show only Privileged, only Hot Documents)
+- Date range filtering
+- Combined filter logic with search
+
+### Priority G: Logo Integration (Cosmetic)
+- Upload Turman Legal Solutions logo to public/static/
+- Modify header HTML to display logo
+- Responsive logo sizing for mobile devices
+
+### Priority H: Production Deployment
+- Call setup_cloudflare_api_key for authentication
+- Create production D1 database: `npx wrangler d1 create tls-ediscovery-production`
+- Apply migrations to production: `npx wrangler d1 migrations apply tls-ediscovery-production`
+- Create Cloudflare Pages project
+- Deploy application: `npm run deploy:prod`
+- Configure ANTHROPIC_API_KEY secret
+- Initialize production database via /api/init-db endpoint
+
+### Priority I: Multi-User Authentication (Production Requirement)
+- Integrate authentication provider (Cloudflare Access, Auth0, or Clerk)
+- Implement role-based access control (attorney vs paralegal vs client)
+- Add user tracking to created_by fields throughout database
+- Enforce matter-level document segregation
+- Build audit trail logging for compliance
 
 ## Deployment Instructions
 
@@ -410,5 +485,5 @@ For internal use only.
 ---
 
 **Last Updated**: October 31, 2025  
-**Version**: 0.1.0 (Alpha - MVP Development)  
-**Status**: ✅ Foundation Complete | 🚧 Core Features In Progress
+**Version**: 0.3.0 (Alpha - Core Features Complete)  
+**Status**: ✅ Priorities A, B, C Complete | Ready for Classification UI, OCR, or Production Deployment
