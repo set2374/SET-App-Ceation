@@ -135,7 +135,7 @@ app.get('/', (c) => {
               </svg>
               <h2 class="text-base font-semibold text-gray-900">VitaQuest Matter</h2>
             </div>
-            <p class="text-xs text-gray-500">Chat with your documents using AI • Powered by Claude Sonnet 4.5</p>
+            <p class="text-xs text-gray-500">Chat with your documents using AI • Powered by Claude Sonnet 3.5</p>
           </div>
 
           {/* Chat Messages */}
@@ -882,7 +882,7 @@ app.post('/api/reports/hot-documents', async (c) => {
   }
 })
 
-// Chat with Claude Sonnet 4.5
+// Chat with Claude Sonnet 3.5
 app.post('/api/chat', async (c) => {
   const { DB, ANTHROPIC_API_KEY } = c.env
   
@@ -943,7 +943,7 @@ ${documentsContext || '[No documents selected - user may be asking a general que
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-3-5-20241022',
         max_tokens: 4096,
         messages: [
           {
