@@ -222,35 +222,121 @@ app.get('/', (c) => {
   )
 })
 
+// Database initialization endpoint
+app.get('/api/init-db', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    // Check if tables exist
+    const check = await DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='matters'
+    `).first()
+    
+    if (check) {
+      return c.json({ success: true, message: 'Database already initialized' })
+    }
+    
+    // Initialize database with schema
+    const schema = `
+      CREATE TABLE IF NOT EXISTS matters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        bates_prefix TEXT NOT NULL,
+        bates_format TEXT NOT NULL DEFAULT 'PREFIX-SEQUENCE',
+        next_bates_number INTEGER NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS classifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        color TEXT DEFAULT '#3b82f6',
+        icon TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        matter_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        bates_start TEXT NOT NULL,
+        bates_end TEXT NOT NULL,
+        page_count INTEGER NOT NULL DEFAULT 1,
+        file_size INTEGER NOT NULL,
+        storage_path TEXT NOT NULL,
+        text_extracted BOOLEAN DEFAULT FALSE,
+        extracted_text TEXT,
+        upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        review_status TEXT DEFAULT 'pending',
+        reviewer_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      INSERT INTO classifications (name, description, color, icon) VALUES
+        ('Hot Document', 'Litigation-significant evidence critical to case strategy', '#ef4444', 'flame'),
+        ('Privileged', 'Attorney-client privilege or work product protection', '#8b5cf6', 'shield'),
+        ('Bad Document', 'Evidence potentially harmful to client position', '#f59e0b', 'alert-triangle'),
+        ('Key Witness', 'Documents authored by or referencing critical witnesses', '#10b981', 'user'),
+        ('Exhibit', 'Likely trial or deposition exhibit', '#3b82f6', 'file-text'),
+        ('Needs Review', 'Requires senior attorney examination', '#6b7280', 'eye');
+      
+      INSERT INTO matters (name, description, bates_prefix, bates_format, next_bates_number) VALUES
+        ('VitaQuest', 'VitaQuest litigation test matter', 'VQ', 'VQ-SEQUENCE', 1);
+    `
+    
+    // Execute schema statements
+    const statements = schema.split(';').filter(s => s.trim())
+    for (const stmt of statements) {
+      await DB.prepare(stmt).run()
+    }
+    
+    return c.json({ success: true, message: 'Database initialized successfully' })
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message }, 500)
+  }
+})
+
 // API Routes
 app.get('/api/matters', async (c) => {
   const { DB } = c.env
-  const matters = await DB.prepare('SELECT * FROM matters ORDER BY created_at DESC').all()
-  return c.json(matters.results || [])
+  try {
+    const matters = await DB.prepare('SELECT * FROM matters ORDER BY created_at DESC').all()
+    return c.json(matters.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
 })
 
 app.get('/api/documents', async (c) => {
   const { DB } = c.env
   const matterId = c.req.query('matter_id') || '1'
   
-  const documents = await DB.prepare(`
-    SELECT d.*, 
-           GROUP_CONCAT(DISTINCT c.name) as classifications
-    FROM documents d
-    LEFT JOIN document_classifications dc ON d.id = dc.document_id
-    LEFT JOIN classifications c ON dc.classification_id = c.id
-    WHERE d.matter_id = ?
-    GROUP BY d.id
-    ORDER BY d.upload_date DESC
-  `).bind(matterId).all()
-  
-  return c.json(documents.results || [])
+  try {
+    const documents = await DB.prepare(`
+      SELECT d.*
+      FROM documents d
+      WHERE d.matter_id = ?
+      ORDER BY d.upload_date DESC
+    `).bind(matterId).all()
+    
+    return c.json(documents.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
 })
 
 app.get('/api/classifications', async (c) => {
   const { DB } = c.env
-  const classifications = await DB.prepare('SELECT * FROM classifications ORDER BY name').all()
-  return c.json(classifications.results || [])
+  try {
+    const classifications = await DB.prepare('SELECT * FROM classifications ORDER BY name').all()
+    return c.json(classifications.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
 })
 
 export default app
