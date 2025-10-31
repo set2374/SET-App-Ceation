@@ -1,21 +1,20 @@
-// TLS eDiscovery Platform - Frontend Application
+// TLS eDiscovery Platform - NotebookLM-Style Interface
 
 // Global state
 let currentMatter = 1;
-let currentDocument = null;
-let currentPage = 1;
-let documents = [];
-let classifications = [];
+let selectedSources = [];
+let notes = [];
+let chatHistory = [];
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('TLS eDiscovery Platform initializing...');
+  console.log('TLS eDiscovery Platform (NotebookLM style) initializing...');
   
   // Load initial data
-  await loadClassifications();
+  await loadNotes();
   await loadDocuments();
   
-  // Set up event listeners
+  // Setup event listeners
   setupEventListeners();
   
   console.log('Application ready');
@@ -23,324 +22,463 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Setup all event listeners
 function setupEventListeners() {
+  // Add source button
+  const addSourceBtn = document.getElementById('add-source-btn');
+  if (addSourceBtn) {
+    addSourceBtn.addEventListener('click', toggleUploadArea);
+  }
+  
   // File upload
   const fileInput = document.getElementById('file-upload');
   if (fileInput) {
     fileInput.addEventListener('change', handleFileUpload);
   }
   
-  // Search input
-  const searchInput = document.getElementById('search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', debounce(handleSearch, 300));
+  // Chat input
+  const chatInput = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('send-chat');
+  
+  if (chatInput && sendBtn) {
+    sendBtn.addEventListener('click', () => sendChatMessage());
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
   }
   
-  // Filter tags
-  document.querySelectorAll('.filter-tag').forEach(tag => {
-    tag.addEventListener('click', () => {
-      document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
-      tag.classList.add('active');
-      filterDocuments(tag.dataset.filter);
-    });
-  });
-  
-  // Tab switching
-  document.querySelectorAll('.tab-button').forEach(button => {
+  // Suggested questions
+  document.querySelectorAll('.suggested-question').forEach(button => {
     button.addEventListener('click', () => {
-      switchTab(button.dataset.tab);
+      const question = button.querySelector('span').textContent;
+      document.getElementById('chat-input').value = question;
+      sendChatMessage();
     });
   });
   
-  // PDF navigation
-  const prevBtn = document.getElementById('prev-page');
-  const nextBtn = document.getElementById('next-page');
-  if (prevBtn) prevBtn.addEventListener('click', () => navigatePage(-1));
-  if (nextBtn) nextBtn.addEventListener('click', () => navigatePage(1));
+  // Quick actions
+  document.querySelectorAll('.quick-action').forEach(button => {
+    button.addEventListener('click', () => {
+      const text = button.textContent.trim();
+      if (text.includes('Privilege Log')) {
+        generatePrivilegeLog();
+      } else if (text.includes('Timeline')) {
+        generateTimeline();
+      } else if (text.includes('Hot Document')) {
+        generateHotDocReport();
+      }
+    });
+  });
   
-  // Add note button
-  const addNoteBtn = document.getElementById('add-note-btn');
-  if (addNoteBtn) {
-    addNoteBtn.addEventListener('click', showNoteDialog);
+  // Report buttons
+  document.querySelectorAll('.report-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const reportType = button.querySelector('.text-sm.font-semibold').textContent;
+      if (reportType.includes('Privilege Log')) {
+        generatePrivilegeLog();
+      } else if (reportType.includes('Timeline')) {
+        generateTimeline();
+      } else if (reportType.includes('Hot Document')) {
+        generateHotDocReport();
+      }
+    });
+  });
+  
+  // Notes/Reports tab switching
+  document.querySelectorAll('.notes-tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.tab;
+      switchNotesTab(tab);
+    });
+  });
+  
+  // Add manual note button
+  const addManualNoteBtn = document.getElementById('add-manual-note');
+  if (addManualNoteBtn) {
+    addManualNoteBtn.addEventListener('click', showAddNoteDialog);
   }
 }
 
-// Load classifications from API
-async function loadClassifications() {
-  try {
-    const response = await fetch('/api/classifications');
-    classifications = await response.json();
-    console.log('Loaded classifications:', classifications);
-  } catch (error) {
-    console.error('Error loading classifications:', error);
-    showNotification('Failed to load classifications', 'error');
+// Toggle upload area visibility
+function toggleUploadArea() {
+  const uploadArea = document.getElementById('upload-area');
+  if (uploadArea) {
+    uploadArea.classList.toggle('hidden');
   }
 }
 
-// Load documents from API
+// Load documents (sources)
 async function loadDocuments() {
   try {
     const response = await fetch(`/api/documents?matter_id=${currentMatter}`);
-    documents = await response.json();
+    const documents = await response.json();
     console.log('Loaded documents:', documents);
-    renderDocumentList(documents);
-    updateFilterCounts();
+    renderSourcesList(documents);
   } catch (error) {
     console.error('Error loading documents:', error);
     showNotification('Failed to load documents', 'error');
   }
 }
 
-// Render document list
-function renderDocumentList(docs) {
-  const container = document.getElementById('document-list');
+// Render sources list with checkboxes
+function renderSourcesList(docs) {
+  const container = document.getElementById('sources-list');
   if (!container) return;
   
   if (docs.length === 0) {
     container.innerHTML = `
       <div class="text-center text-gray-500 py-12">
-        <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <p class="mt-4 text-sm">No documents uploaded</p>
-        <p class="text-xs text-gray-400 mt-1">Upload PDFs to begin review</p>
+        <p class="mt-3 text-sm">No sources yet</p>
+        <p class="text-xs text-gray-400 mt-1">Upload PDFs to get started</p>
       </div>
     `;
     return;
   }
   
-  container.innerHTML = docs.map(doc => {
-    const tags = doc.classifications ? doc.classifications.split(',') : [];
-    const tagHTML = tags.map(tag => {
-      const className = tag.toLowerCase().replace(' ', '-');
-      return `<span class="tag ${className}">${tag}</span>`;
-    }).join('');
-    
-    return `
-      <div class="document-card" data-id="${doc.id}" onclick="selectDocument(${doc.id})">
-        <div class="filename">${escapeHtml(doc.filename)}</div>
-        <div class="bates">${doc.bates_start}${doc.page_count > 1 ? ' - ' + doc.bates_end : ''}</div>
-        <div class="meta">
-          <span>${doc.page_count} page${doc.page_count > 1 ? 's' : ''}</span>
-          <span>${formatDate(doc.upload_date)}</span>
+  container.innerHTML = docs.map(doc => `
+    <div class="source-item p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 transition-colors mb-2">
+      <div class="flex items-start space-x-3">
+        <input 
+          type="checkbox" 
+          class="source-checkbox mt-1" 
+          data-id="${doc.id}"
+          checked
+        />
+        <div class="flex-1 min-w-0 cursor-pointer" onclick="openPDFViewer(${doc.id})">
+          <p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(doc.filename)}</p>
+          <p class="text-xs text-blue-600 font-mono mt-0.5">${doc.bates_start}${doc.page_count > 1 ? ' - ' + doc.bates_end : ''}</p>
+          <p class="text-xs text-gray-500 mt-1">${doc.page_count} page${doc.page_count > 1 ? 's' : ''}</p>
         </div>
-        ${tagHTML ? `<div class="tags">${tagHTML}</div>` : ''}
       </div>
-    `;
-  }).join('');
-}
-
-// Select document
-async function selectDocument(docId) {
-  const doc = documents.find(d => d.id === docId);
-  if (!doc) return;
+    </div>
+  `).join('');
   
-  currentDocument = doc;
-  currentPage = 1;
-  
-  // Update UI
-  document.querySelectorAll('.document-card').forEach(card => {
-    card.classList.toggle('active', card.dataset.id == docId);
+  // Add checkbox listeners
+  container.querySelectorAll('.source-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', updateSelectedSources);
   });
   
-  // Load document content
-  await loadDocumentContent(doc);
-  
-  // Load AI analysis
-  await loadAIAnalysis(doc);
-  
-  // Load notes
-  await loadNotes(doc);
-  
-  // Load classifications
-  renderClassificationOptions(doc);
+  // Initialize selected sources
+  updateSelectedSources();
 }
 
-// Load document content (PDF viewer)
-async function loadDocumentContent(doc) {
-  const viewer = document.getElementById('pdf-viewer');
-  if (!viewer) return;
-  
-  viewer.innerHTML = `
-    <div class="text-center">
-      <div class="spinner"></div>
-      <p class="mt-4 text-sm text-gray-600">Loading PDF...</p>
-    </div>
-  `;
-  
-  // TODO: Implement actual PDF.js integration
-  // For now, show placeholder
-  setTimeout(() => {
-    viewer.innerHTML = `
-      <div class="text-center">
-        <div class="bg-white p-8 rounded-lg shadow-lg max-w-2xl">
-          <svg class="mx-auto h-24 w-24 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3 class="mt-4 text-lg font-semibold text-gray-900">${escapeHtml(doc.filename)}</h3>
-          <p class="mt-2 text-sm text-gray-600">Bates: ${doc.bates_start} - ${doc.bates_end}</p>
-          <p class="mt-1 text-sm text-gray-600">${doc.page_count} pages</p>
-          <p class="mt-4 text-xs text-gray-500">PDF viewer integration coming soon</p>
-        </div>
-      </div>
-    `;
-    updatePageInfo();
-  }, 500);
+// Update selected sources array
+function updateSelectedSources() {
+  selectedSources = Array.from(document.querySelectorAll('.source-checkbox:checked'))
+    .map(cb => parseInt(cb.dataset.id));
+  console.log('Selected sources:', selectedSources);
 }
 
-// Load AI analysis
-async function loadAIAnalysis(doc) {
-  const container = document.getElementById('analysis-tab');
-  if (!container) return;
+// Open PDF viewer
+function openPDFViewer(docId) {
+  const overlay = document.getElementById('pdf-overlay');
+  if (!overlay) return;
   
-  container.innerHTML = `
-    <div class="p-4">
-      <div class="text-center py-8">
-        <div class="spinner"></div>
-        <p class="mt-4 text-sm text-gray-600">Analyzing document with Claude Sonnet 4.5...</p>
-      </div>
-    </div>
-  `;
+  // TODO: Load actual PDF
+  const titleEl = document.getElementById('pdf-title');
+  const batesEl = document.getElementById('pdf-bates');
   
-  // TODO: Call actual AI analysis API
-  // For now, show mock analysis
-  setTimeout(() => {
-    const mockAnalysis = {
-      privilege: {
-        determination: 'Likely Privileged',
-        confidence: 'high',
-        reasoning: 'This email communication appears to be between attorney and client regarding legal strategy. The subject line contains "Confidential Legal Advice" and the sender domain is turmanlegalsolutions.com.'
-      },
-      hotDoc: {
-        determination: 'Not Hot Document',
-        confidence: 'medium',
-        reasoning: 'Document contains routine correspondence without litigation-significant facts or admissions.'
-      },
-      summary: 'Email exchange discussing case strategy and settlement options. Client seeks legal advice regarding potential settlement amounts and litigation risks.',
-      entities: {
-        people: ['Stephen Turman', 'John Smith'],
-        dates: ['2024-10-15'],
-        amounts: ['$250,000']
-      }
-    };
+  if (titleEl) titleEl.textContent = `Document ${docId}`;
+  if (batesEl) batesEl.textContent = `VQ-${String(docId).padStart(6, '0')}`;
+  
+  overlay.classList.remove('hidden');
+  
+  // Close button
+  const closeBtn = document.getElementById('close-pdf');
+  if (closeBtn) {
+    closeBtn.onclick = () => overlay.classList.add('hidden');
+  }
+  
+  showNotification('PDF viewer integration coming soon', 'info');
+}
+
+// Send chat message
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  
+  const message = input.value.trim();
+  if (!message) return;
+  
+  // Clear input
+  input.value = '';
+  
+  // Add user message to chat
+  addChatMessage('user', message);
+  
+  // Show loading state
+  const loadingId = addChatMessage('assistant', 'Analyzing documents with Claude Sonnet 4.5...', true);
+  
+  try {
+    // TODO: Call actual Claude API
+    // Simulate AI response
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
-    container.innerHTML = `
-      <div class="p-4">
-        <div class="analysis-card">
-          <div class="title">
-            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            Privilege Analysis
-            <span class="confidence-badge ${mockAnalysis.privilege.confidence}">${mockAnalysis.privilege.determination}</span>
-          </div>
-          <div class="content">${mockAnalysis.privilege.reasoning}</div>
-          <button class="mt-3 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700">
-            Accept & Add to Privilege Log
-          </button>
-        </div>
-        
-        <div class="analysis-card">
-          <div class="title">
-            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-            </svg>
-            Hot Document Assessment
-            <span class="confidence-badge ${mockAnalysis.hotDoc.confidence}">${mockAnalysis.hotDoc.determination}</span>
-          </div>
-          <div class="content">${mockAnalysis.hotDoc.reasoning}</div>
-        </div>
-        
-        <div class="analysis-card">
-          <div class="title">
-            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Document Summary
-          </div>
-          <div class="content">${mockAnalysis.summary}</div>
-        </div>
-        
-        <div class="analysis-card">
-          <div class="title">
-            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            Key Entities
-          </div>
-          <div class="content">
-            <div class="mt-2">
-              <strong>People:</strong> ${mockAnalysis.entities.people.join(', ')}
-            </div>
-            <div class="mt-1">
-              <strong>Dates:</strong> ${mockAnalysis.entities.dates.join(', ')}
-            </div>
-            <div class="mt-1">
-              <strong>Amounts:</strong> ${mockAnalysis.entities.amounts.join(', ')}
-            </div>
-          </div>
-        </div>
+    // Remove loading message
+    removeChat Message(loadingId);
+    
+    // Mock AI response with Bates citations
+    const mockResponse = generateMockAIResponse(message);
+    addChatMessage('assistant', mockResponse);
+    
+  } catch (error) {
+    console.error('Chat error:', error);
+    removeChatMessage(loadingId);
+    addChatMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+  }
+}
+
+// Generate mock AI response
+function generateMockAIResponse(question) {
+  const lowerQ = question.toLowerCase();
+  
+  if (lowerQ.includes('privilege') || lowerQ.includes('attorney-client')) {
+    return `Based on my analysis of the selected documents, I found 3 documents that appear to contain attorney-client privileged communications:
+
+1. <span class="bates-citation" data-bates="VQ-000012">VQ-000012</span> - Email from jane.doe@turmanlegalsolutions.com to client discussing litigation strategy
+2. <span class="bates-citation" data-bates="VQ-000045">VQ-000045</span> - Memo marked "Confidential Legal Advice" regarding settlement options
+3. <span class="bates-citation" data-bates="VQ-000087">VQ-000087</span> - Attorney work product analyzing case strengths and weaknesses
+
+These documents contain communications between attorney and client for the purpose of obtaining legal advice, and should be withheld from production under the attorney-client privilege.
+
+<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>`;
+  }
+  
+  if (lowerQ.includes('settlement') || lowerQ.includes('negotiate')) {
+    return `I found 2 documents referencing settlement negotiations:
+
+1. <span class="bates-citation" data-bates="VQ-000023">VQ-000023</span> - Email discussing potential settlement amount of $250,000
+2. <span class="bates-citation" data-bates="VQ-000056">VQ-000056</span> - Meeting notes from settlement conference on March 15, 2024
+
+These documents may be subject to settlement privilege protection depending on your jurisdiction's rules.
+
+<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>`;
+  }
+  
+  if (lowerQ.includes('hot') || lowerQ.includes('admission')) {
+    return `I identified 1 potential hot document with an admission against interest:
+
+1. <span class="bates-citation" data-bates="VQ-000034">VQ-000034</span> - Email where defendant's CEO states "I knew about the defect but thought we could fix it before anyone got hurt"
+
+This document contains a clear admission of prior knowledge of the defect, which contradicts defendant's sworn testimony that they had no knowledge of any safety issues. This is critical impeachment evidence.
+
+<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>`;
+  }
+  
+  if (lowerQ.includes('privilege log') || lowerQ.includes('generate')) {
+    return `I can help you generate a privilege log. Based on the privileged documents I've identified, I'll create a court-compliant privilege log with the following information:
+
+- Bates numbers (with clickable hyperlinks)
+- Document dates
+- Authors and recipients
+- Subject lines/descriptions
+- Privilege type claimed (attorney-client, work product)
+- Justification for privilege claim
+
+Would you like me to proceed with generating the privilege log in Excel format?
+
+<button class="generate-privilege-log-btn mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">Generate Privilege Log</button>`;
+  }
+  
+  // Default response
+  return `I've analyzed the selected documents regarding your question: "${question}"
+
+To provide a more accurate answer, could you clarify:
+- Are you looking for specific types of documents (emails, contracts, etc.)?
+- Are you interested in documents from a particular time period?
+- Should I focus on specific people or parties?
+
+Alternatively, you can try one of these queries:
+- "Which documents contain attorney-client privileged communications?"
+- "Show me all emails mentioning settlement discussions"
+- "Identify hot documents with admissions against interest"
+
+<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>`;
+}
+
+// Add message to chat
+function addChatMessage(role, content, isLoading = false) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return null;
+  
+  const messageId = `msg-${Date.now()}`;
+  const messageClass = role === 'user' ? 'bg-blue-600 text-white ml-auto' : 'bg-gray-100 text-gray-900';
+  const alignClass = role === 'user' ? 'justify-end' : 'justify-start';
+  
+  const messageHTML = `
+    <div id="${messageId}" class="flex ${alignClass} max-w-3xl mx-auto">
+      <div class="${messageClass} rounded-lg px-4 py-3 max-w-2xl">
+        <div class="text-sm ${isLoading ? 'italic' : ''}">${content}</div>
       </div>
-    `;
-  }, 1500);
+    </div>
+  `;
+  
+  container.insertAdjacentHTML('beforeend', messageHTML);
+  container.scrollTop = container.scrollHeight;
+  
+  // Add event listeners to Bates citations and buttons
+  if (role === 'assistant' && !isLoading) {
+    setTimeout(() => {
+      const messageEl = document.getElementById(messageId);
+      if (messageEl) {
+        // Bates citations
+        messageEl.querySelectorAll('.bates-citation').forEach(citation => {
+          citation.style.cssText = 'color: #2563eb; cursor: pointer; text-decoration: underline; font-weight: 600;';
+          citation.addEventListener('click', () => {
+            const bates = citation.dataset.bates;
+            showNotification(`Opening ${bates}...`, 'info');
+            // TODO: Open PDF to specific page
+          });
+        });
+        
+        // Save to notes button
+        messageEl.querySelectorAll('.save-to-notes-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const noteText = messageEl.querySelector('.text-sm').textContent;
+            saveNoteFromChat(noteText);
+          });
+        });
+        
+        // Generate privilege log button
+        messageEl.querySelectorAll('.generate-privilege-log-btn').forEach(btn => {
+          btn.addEventListener('click', generatePrivilegeLog);
+        });
+      }
+    }, 100);
+  }
+  
+  return messageId;
+}
+
+// Remove chat message
+function removeChatMessage(messageId) {
+  const message = document.getElementById(messageId);
+  if (message) message.remove();
+}
+
+// Save note from chat
+async function saveNoteFromChat(text) {
+  try {
+    // Extract Bates references from text
+    const batesMatches = text.match(/VQ-\d{6}/g);
+    const batesRefs = batesMatches ? batesMatches.join(', ') : null;
+    
+    const response = await fetch('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note_text: text,
+        bates_references: batesRefs,
+        source: 'chat'
+      })
+    });
+    
+    if (response.ok) {
+      showNotification('Saved to notes', 'success');
+      await loadNotes();
+    }
+  } catch (error) {
+    console.error('Error saving note:', error);
+    showNotification('Failed to save note', 'error');
+  }
 }
 
 // Load notes
-async function loadNotes(doc) {
+async function loadNotes() {
+  try {
+    const response = await fetch('/api/notes');
+    notes = await response.json();
+    renderNotes();
+  } catch (error) {
+    console.error('Error loading notes:', error);
+  }
+}
+
+// Render notes
+function renderNotes() {
   const container = document.getElementById('notes-list');
   if (!container) return;
   
-  // TODO: Load actual notes from API
-  container.innerHTML = `
-    <div class="text-center text-gray-500 py-8">
-      <p class="text-sm">No notes yet</p>
-      <p class="text-xs text-gray-400 mt-1">Click "Add Note" to create one</p>
-    </div>
-  `;
-}
-
-// Render classification options
-function renderClassificationOptions(doc) {
-  const container = document.getElementById('classification-list');
-  if (!container) return;
-  
-  container.innerHTML = classifications.map(cls => {
-    const icon = getClassificationIcon(cls.name);
-    return `
-      <div class="classification-item" onclick="toggleClassification(${doc.id}, ${cls.id})">
-        <input type="checkbox" id="cls-${cls.id}" />
-        <div class="classification-info">
-          <div class="classification-name">
-            ${icon} ${cls.name}
-          </div>
-          <div class="classification-desc">${cls.description}</div>
-        </div>
+  if (notes.length === 0) {
+    container.innerHTML = `
+      <div class="text-center text-gray-500 py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        <p class="mt-3 text-sm">No notes yet</p>
+        <p class="text-xs text-gray-400 mt-1">Save insights from chat conversations</p>
       </div>
     `;
-  }).join('');
-}
-
-// Get classification icon
-function getClassificationIcon(name) {
-  const icons = {
-    'Hot Document': '🔥',
-    'Privileged': '🛡️',
-    'Bad Document': '⚠️',
-    'Key Witness': '👤',
-    'Exhibit': '📄',
-    'Needs Review': '👁️'
-  };
-  return icons[name] || '🏷️';
-}
-
-// Toggle classification
-async function toggleClassification(docId, classificationId) {
-  const checkbox = document.getElementById(`cls-${classificationId}`);
-  if (checkbox) {
-    checkbox.checked = !checkbox.checked;
-    // TODO: Save to API
-    console.log(`Toggle classification ${classificationId} for document ${docId}: ${checkbox.checked}`);
-    showNotification('Classification updated', 'success');
+    return;
   }
+  
+  container.innerHTML = notes.map(note => `
+    <div class="note-card bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+      <div class="flex items-start justify-between mb-2">
+        <span class="text-xs font-medium text-yellow-800">${note.source === 'chat' ? '💬 From Chat' : '✍️ Manual'}</span>
+        <span class="text-xs text-gray-500">${formatDate(note.created_at)}</span>
+      </div>
+      <p class="text-sm text-gray-800 mb-2">${escapeHtml(note.note_text.substring(0, 200))}${note.note_text.length > 200 ? '...' : ''}</p>
+      ${note.bates_references ? `<div class="text-xs text-blue-600 font-mono">${note.bates_references}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// Switch notes/reports tab
+function switchNotesTab(tab) {
+  // Update button styles
+  document.querySelectorAll('.notes-tab-button').forEach(btn => {
+    if (btn.dataset.tab === tab) {
+      btn.classList.add('active', 'border-blue-600', 'text-blue-600');
+      btn.classList.remove('border-transparent', 'text-gray-600');
+    } else {
+      btn.classList.remove('active', 'border-blue-600', 'text-blue-600');
+      btn.classList.add('border-transparent', 'text-gray-600');
+    }
+  });
+  
+  // Show/hide panels
+  document.getElementById('notes-panel').classList.toggle('hidden', tab !== 'notes');
+  document.getElementById('reports-panel').classList.toggle('hidden', tab !== 'reports');
+}
+
+// Show add note dialog
+function showAddNoteDialog() {
+  const noteText = prompt('Enter your note:');
+  if (noteText && noteText.trim()) {
+    saveNoteFromChat(noteText);
+  }
+}
+
+// Generate privilege log
+function generatePrivilegeLog() {
+  showNotification('Generating privilege log with clickable Bates hyperlinks...', 'info');
+  // TODO: Implement actual privilege log generation
+  setTimeout(() => {
+    showNotification('Privilege log generated! (Feature coming soon)', 'success');
+  }, 1500);
+}
+
+// Generate timeline
+function generateTimeline() {
+  showNotification('Creating chronological timeline...', 'info');
+  // TODO: Implement actual timeline generation
+  setTimeout(() => {
+    showNotification('Timeline generated! (Feature coming soon)', 'success');
+  }, 1500);
+}
+
+// Generate hot document report
+function generateHotDocReport() {
+  showNotification('Compiling hot documents report...', 'info');
+  // TODO: Implement actual hot doc report
+  setTimeout(() => {
+    showNotification('Hot documents report generated! (Feature coming soon)', 'success');
+  }, 1500);
 }
 
 // Handle file upload
@@ -359,7 +497,7 @@ async function handleFileUpload(event) {
     try {
       // TODO: Implement actual upload to R2
       console.log('Uploading file:', file.name);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate upload
+      await new Promise(resolve => setTimeout(resolve, 1000));
       showNotification(`${file.name} uploaded successfully`, 'success');
     } catch (error) {
       console.error('Upload error:', error);
@@ -370,139 +508,17 @@ async function handleFileUpload(event) {
   // Reload documents
   await loadDocuments();
   
+  // Hide upload area
+  toggleUploadArea();
+  
   // Reset input
   event.target.value = '';
-}
-
-// Handle search
-function handleSearch(event) {
-  const query = event.target.value.toLowerCase().trim();
-  if (!query) {
-    renderDocumentList(documents);
-    return;
-  }
-  
-  const filtered = documents.filter(doc => 
-    doc.filename.toLowerCase().includes(query) ||
-    doc.bates_start.toLowerCase().includes(query) ||
-    (doc.extracted_text && doc.extracted_text.toLowerCase().includes(query))
-  );
-  
-  renderDocumentList(filtered);
-}
-
-// Filter documents by classification
-function filterDocuments(filter) {
-  if (filter === 'all') {
-    renderDocumentList(documents);
-    return;
-  }
-  
-  const filterMap = {
-    'hot': 'Hot Document',
-    'privileged': 'Privileged',
-    'bad': 'Bad Document'
-  };
-  
-  const classification = filterMap[filter];
-  const filtered = documents.filter(doc => 
-    doc.classifications && doc.classifications.includes(classification)
-  );
-  
-  renderDocumentList(filtered);
-}
-
-// Update filter counts
-function updateFilterCounts() {
-  const counts = {
-    all: documents.length,
-    hot: documents.filter(d => d.classifications && d.classifications.includes('Hot Document')).length,
-    privileged: documents.filter(d => d.classifications && d.classifications.includes('Privileged')).length,
-    bad: documents.filter(d => d.classifications && d.classifications.includes('Bad Document')).length
-  };
-  
-  document.querySelectorAll('.filter-tag').forEach(tag => {
-    const filter = tag.dataset.filter;
-    const countEl = tag.querySelector('.count');
-    if (countEl && counts[filter] !== undefined) {
-      countEl.textContent = counts[filter];
-    }
-  });
-}
-
-// Switch tab
-function switchTab(tabName) {
-  // Update buttons
-  document.querySelectorAll('.tab-button').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabName);
-  });
-  
-  // Update content
-  document.querySelectorAll('.tab-content').forEach(content => {
-    content.classList.toggle('active', content.id === `${tabName}-tab`);
-  });
-}
-
-// Navigate PDF pages
-function navigatePage(delta) {
-  if (!currentDocument) return;
-  
-  currentPage = Math.max(1, Math.min(currentDocument.page_count, currentPage + delta));
-  updatePageInfo();
-  
-  // TODO: Update PDF viewer to show new page
-}
-
-// Update page info
-function updatePageInfo() {
-  const pageInfo = document.getElementById('page-info');
-  const batesInfo = document.getElementById('bates-info');
-  const prevBtn = document.getElementById('prev-page');
-  const nextBtn = document.getElementById('next-page');
-  
-  if (currentDocument && pageInfo && batesInfo) {
-    pageInfo.textContent = `Page ${currentPage} of ${currentDocument.page_count}`;
-    // TODO: Calculate actual Bates number for current page
-    batesInfo.textContent = currentDocument.bates_start;
-    
-    if (prevBtn) prevBtn.disabled = currentPage === 1;
-    if (nextBtn) nextBtn.disabled = currentPage === currentDocument.page_count;
-  }
-}
-
-// Show note dialog
-function showNoteDialog() {
-  if (!currentDocument) {
-    showNotification('Please select a document first', 'warning');
-    return;
-  }
-  
-  const noteText = prompt('Enter your note:');
-  if (noteText && noteText.trim()) {
-    // TODO: Save note via API
-    console.log('Adding note:', noteText);
-    showNotification('Note added', 'success');
-    loadNotes(currentDocument);
-  }
 }
 
 // Utility: Show notification
 function showNotification(message, type = 'info') {
   console.log(`[${type.toUpperCase()}] ${message}`);
-  // TODO: Implement actual toast notification UI
-}
-
-// Utility: Debounce function
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+  // TODO: Implement toast notification UI
 }
 
 // Utility: Escape HTML
@@ -515,9 +531,5 @@ function escapeHtml(text) {
 // Utility: Format date
 function formatDate(dateString) {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-
-// Make functions globally accessible
-window.selectDocument = selectDocument;
-window.toggleClassification = toggleClassification;

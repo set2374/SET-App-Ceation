@@ -20,203 +20,279 @@ app.use('/static/*', serveStatic({ root: './public' }))
 // Use renderer middleware
 app.use(renderer)
 
-// Main dashboard route
+// Main dashboard route - NotebookLM-style interface
 app.get('/', (c) => {
   return c.render(
     <div class="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header class="bg-gradient-to-r from-blue-900 to-blue-700 text-white shadow-lg">
-        <div class="px-6 py-4 flex items-center justify-between">
+      <header class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="px-6 py-3 flex items-center justify-between">
           <div class="flex items-center space-x-3">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <div>
-              <h1 class="text-2xl font-bold">TLS eDiscovery Platform</h1>
-              <p class="text-sm text-blue-200">Turman Legal Solutions PLLC</p>
+              <h1 class="text-xl font-semibold text-gray-900">TLS eDiscovery</h1>
+              <p class="text-xs text-gray-500">Turman Legal Solutions</p>
             </div>
           </div>
-          <div class="flex items-center space-x-4">
-            <select id="matter-selector" class="bg-blue-800 text-white px-4 py-2 rounded-lg border border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400">
-              <option value="1">VitaQuest</option>
+          <div class="flex items-center space-x-3">
+            <select id="matter-selector" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="1">VitaQuest Matter</option>
             </select>
-            <div class="flex items-center space-x-2 bg-blue-800 px-4 py-2 rounded-lg">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <div class="flex items-center space-x-2 text-sm text-gray-700">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
               </svg>
-              <span class="font-medium">Stephen Turman</span>
+              <span>Stephen Turman</span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Three-panel layout */}
+      {/* Three-panel NotebookLM layout */}
       <div class="flex-1 flex overflow-hidden">
-        {/* Left Panel - Document Library */}
-        <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+        
+        {/* LEFT PANEL - Sources & PDF Viewer (~25%) */}
+        <div class="w-1/4 bg-white border-r border-gray-200 flex flex-col min-w-[300px] max-w-[400px]">
+          {/* Sources Header */}
           <div class="p-4 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-800 mb-3">Document Library</h2>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-gray-900">Sources</h2>
+              <button id="add-source-btn" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                + Add source
+              </button>
+            </div>
             
-            {/* Upload Area */}
-            <div class="mb-4">
+            {/* Upload Area (hidden by default, shown when Add source clicked) */}
+            <div id="upload-area" class="hidden mb-3">
               <label class="block w-full cursor-pointer">
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                  <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  <p class="mt-2 text-sm text-gray-600">Click to upload PDFs</p>
-                  <p class="text-xs text-gray-500 mt-1">or drag and drop</p>
+                  <p class="mt-1 text-xs text-gray-600">Upload PDFs</p>
                 </div>
                 <input type="file" id="file-upload" class="hidden" accept=".pdf" multiple />
               </label>
             </div>
 
-            {/* Search */}
+            {/* Search sources */}
             <div class="relative">
               <input 
                 type="text" 
-                id="search-input"
-                placeholder="Search documents..." 
-                class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="source-search"
+                placeholder="Search sources..." 
+                class="w-full text-sm px-3 py-2 pl-9 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <svg class="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-
-            {/* Filter Tags */}
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button class="filter-tag active" data-filter="all">
-                All <span class="count">0</span>
-              </button>
-              <button class="filter-tag" data-filter="hot">
-                🔥 Hot <span class="count">0</span>
-              </button>
-              <button class="filter-tag" data-filter="privileged">
-                🛡️ Privileged <span class="count">0</span>
-              </button>
-              <button class="filter-tag" data-filter="bad">
-                ⚠️ Bad <span class="count">0</span>
-              </button>
-            </div>
           </div>
 
-          {/* Document List */}
-          <div id="document-list" class="flex-1 overflow-y-auto p-4">
+          {/* Sources List with Checkboxes */}
+          <div id="sources-list" class="flex-1 overflow-y-auto p-3">
             <div class="text-center text-gray-500 py-12">
-              <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p class="mt-4 text-sm">No documents uploaded</p>
-              <p class="text-xs text-gray-400 mt-1">Upload PDFs to begin review</p>
+              <p class="mt-3 text-sm">No sources yet</p>
+              <p class="text-xs text-gray-400 mt-1">Upload PDFs to get started</p>
+            </div>
+          </div>
+
+          {/* PDF Viewer (expandable overlay) */}
+          <div id="pdf-overlay" class="hidden absolute inset-0 bg-white z-10 flex flex-col">
+            <div class="p-3 border-b border-gray-200 flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <button id="close-pdf" class="p-1 hover:bg-gray-100 rounded">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <span id="pdf-title" class="text-sm font-medium text-gray-900">Document</span>
+              </div>
+              <span id="pdf-bates" class="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded">VQ-000001</span>
+            </div>
+            <div id="pdf-content" class="flex-1 overflow-auto bg-gray-100 p-4">
+              {/* PDF.js will render here */}
             </div>
           </div>
         </div>
 
-        {/* Center Panel - PDF Viewer */}
-        <div class="flex-1 bg-gray-100 flex flex-col">
-          <div class="bg-white border-b border-gray-200 p-3 flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-              <button id="prev-page" class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button id="next-page" class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <span id="page-info" class="text-sm text-gray-700">Page 1 of 1</span>
-              <span id="bates-info" class="text-sm font-mono text-blue-700 bg-blue-50 px-3 py-1 rounded">-</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <button id="zoom-out" class="p-2 rounded hover:bg-gray-100">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
-                </svg>
-              </button>
-              <button id="zoom-in" class="p-2 rounded hover:bg-gray-100">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          
-          <div id="pdf-viewer" class="flex-1 overflow-auto p-6 flex items-center justify-center">
-            <div class="text-center text-gray-500">
-              <svg class="mx-auto h-24 w-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        {/* CENTER PANEL - AI Chat (~50%) */}
+        <div class="flex-1 bg-white flex flex-col">
+          {/* Chat Header */}
+          <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center space-x-2 mb-2">
+              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              <p class="mt-4">Select a document to view</p>
+              <h2 class="text-base font-semibold text-gray-900">VitaQuest Matter</h2>
+            </div>
+            <p class="text-xs text-gray-500">Chat with your documents using AI • Powered by Claude Sonnet 4.5</p>
+          </div>
+
+          {/* Chat Messages */}
+          <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Welcome Message */}
+            <div class="max-w-3xl mx-auto">
+              <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-100">
+                <h3 class="text-lg font-semibold text-gray-900 mb-3">Welcome to TLS eDiscovery</h3>
+                <p class="text-sm text-gray-700 mb-4">
+                  Upload your legal documents and ask questions to identify privileged materials, hot documents, and key evidence.
+                </p>
+                
+                {/* Suggested Questions */}
+                <div class="space-y-2">
+                  <p class="text-xs font-medium text-gray-600 uppercase tracking-wide">Suggested questions:</p>
+                  <button class="suggested-question w-full text-left px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <span class="text-sm text-gray-800">Which documents contain attorney-client privileged communications?</span>
+                  </button>
+                  <button class="suggested-question w-full text-left px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <span class="text-sm text-gray-800">Show me all emails mentioning settlement negotiations</span>
+                  </button>
+                  <button class="suggested-question w-full text-left px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <span class="text-sm text-gray-800">Identify hot documents with admissions against interest</span>
+                  </button>
+                  <button class="suggested-question w-full text-left px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <span class="text-sm text-gray-800">Generate a privilege log for all privileged documents</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chat Input */}
+          <div class="p-4 border-t border-gray-200 bg-gray-50">
+            <div class="max-w-3xl mx-auto">
+              <div class="flex space-x-2">
+                <input 
+                  type="text" 
+                  id="chat-input"
+                  placeholder="Ask about your documents..."
+                  class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button id="send-chat" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                  Send
+                </button>
+              </div>
+              
+              {/* Quick Actions */}
+              <div class="flex items-center space-x-2 mt-3">
+                <button class="quick-action text-xs px-3 py-1.5 bg-white border border-gray-300 rounded-full hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  📊 Generate Privilege Log
+                </button>
+                <button class="quick-action text-xs px-3 py-1.5 bg-white border border-gray-300 rounded-full hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  📅 Create Timeline
+                </button>
+                <button class="quick-action text-xs px-3 py-1.5 bg-white border border-gray-300 rounded-full hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  🔥 Hot Document Report
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Panel - AI Analysis & Notes */}
-        <div class="w-96 bg-white border-l border-gray-200 flex flex-col">
+        {/* RIGHT PANEL - Notes & Reports (~25%) */}
+        <div class="w-1/4 bg-white border-l border-gray-200 flex flex-col min-w-[300px] max-w-[400px]">
+          {/* Panel Header with Tabs */}
           <div class="border-b border-gray-200">
             <div class="flex">
-              <button class="tab-button active" data-tab="analysis">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <span>AI Analysis</span>
+              <button class="notes-tab-button active px-4 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600" data-tab="notes">
+                Notes
               </button>
-              <button class="tab-button" data-tab="notes">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Notes</span>
-              </button>
-              <button class="tab-button" data-tab="classifications">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                </svg>
-                <span>Tags</span>
+              <button class="notes-tab-button px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-900" data-tab="reports">
+                Reports
               </button>
             </div>
           </div>
 
-          {/* Tab Content */}
-          <div class="flex-1 overflow-y-auto">
-            {/* AI Analysis Tab */}
-            <div id="analysis-tab" class="tab-content active p-4">
-              <div class="text-center text-gray-500 py-12">
-                <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <p class="mt-4 text-sm">Select a document for AI analysis</p>
-                <p class="text-xs text-gray-400 mt-1">Powered by Claude Sonnet 4.5</p>
+          {/* Notes Tab Content */}
+          <div id="notes-panel" class="flex-1 overflow-y-auto">
+            <div class="p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-gray-900">Saved Insights</h3>
+                <button id="add-manual-note" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                  + Note
+                </button>
               </div>
-            </div>
 
-            {/* Notes Tab */}
-            <div id="notes-tab" class="tab-content p-4 hidden">
-              <button id="add-note-btn" class="w-full mb-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Note</span>
-              </button>
+              {/* Notes List */}
               <div id="notes-list" class="space-y-3">
-                <div class="text-center text-gray-500 py-8">
-                  <p class="text-sm">No notes yet</p>
+                <div class="text-center text-gray-500 py-12">
+                  <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <p class="mt-3 text-sm">No notes yet</p>
+                  <p class="text-xs text-gray-400 mt-1">Save insights from chat conversations</p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Classifications Tab */}
-            <div id="classifications-tab" class="tab-content p-4 hidden">
-              <div class="space-y-3" id="classification-list">
-                <div class="text-center text-gray-500 py-8">
-                  <p class="text-sm">Select a document to add classifications</p>
+          {/* Reports Tab Content */}
+          <div id="reports-panel" class="flex-1 overflow-y-auto hidden">
+            <div class="p-4 space-y-3">
+              <h3 class="text-sm font-semibold text-gray-900 mb-4">Generate Reports</h3>
+              
+              {/* Privilege Log */}
+              <button class="report-button w-full text-left p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 hover:border-purple-400 transition-colors">
+                <div class="flex items-center space-x-3">
+                  <div class="p-2 bg-purple-600 rounded-lg">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-semibold text-gray-900">Privilege Log</p>
+                    <p class="text-xs text-gray-600 mt-0.5">Court-compliant privilege log with Bates hyperlinks</p>
+                  </div>
                 </div>
+              </button>
+
+              {/* Timeline */}
+              <button class="report-button w-full text-left p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 hover:border-blue-400 transition-colors">
+                <div class="flex items-center space-x-3">
+                  <div class="p-2 bg-blue-600 rounded-lg">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-semibold text-gray-900">Timeline</p>
+                    <p class="text-xs text-gray-600 mt-0.5">Chronological timeline of key events and documents</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Hot Document Report */}
+              <button class="report-button w-full text-left p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-lg border border-red-200 hover:border-red-400 transition-colors">
+                <div class="flex items-center space-x-3">
+                  <div class="p-2 bg-red-600 rounded-lg">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-semibold text-gray-900">Hot Documents</p>
+                    <p class="text-xs text-gray-600 mt-0.5">Critical litigation evidence and smoking guns</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Export Options */}
+              <div class="pt-4 mt-4 border-t border-gray-200">
+                <p class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Export</p>
+                <button class="w-full px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  📥 Export All Notes (PDF)
+                </button>
               </div>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   )
@@ -227,7 +303,6 @@ app.get('/api/init-db', async (c) => {
   const { DB } = c.env
   
   try {
-    // Check if tables exist
     const check = await DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name='matters'
     `).first()
@@ -236,7 +311,6 @@ app.get('/api/init-db', async (c) => {
       return c.json({ success: true, message: 'Database already initialized' })
     }
     
-    // Initialize database with schema
     const schema = `
       CREATE TABLE IF NOT EXISTS matters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -276,6 +350,24 @@ app.get('/api/init-db', async (c) => {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       
+      CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        note_text TEXT NOT NULL,
+        bates_references TEXT,
+        source TEXT DEFAULT 'manual',
+        created_by TEXT DEFAULT 'Stephen Turman',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS chat_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        matter_id INTEGER NOT NULL,
+        user_message TEXT NOT NULL,
+        ai_response TEXT NOT NULL,
+        bates_citations TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      
       INSERT INTO classifications (name, description, color, icon) VALUES
         ('Hot Document', 'Litigation-significant evidence critical to case strategy', '#ef4444', 'flame'),
         ('Privileged', 'Attorney-client privilege or work product protection', '#8b5cf6', 'shield'),
@@ -288,7 +380,6 @@ app.get('/api/init-db', async (c) => {
         ('VitaQuest', 'VitaQuest litigation test matter', 'VQ', 'VQ-SEQUENCE', 1);
     `
     
-    // Execute schema statements
     const statements = schema.split(';').filter(s => s.trim())
     for (const stmt of statements) {
       await DB.prepare(stmt).run()
@@ -334,6 +425,30 @@ app.get('/api/classifications', async (c) => {
   try {
     const classifications = await DB.prepare('SELECT * FROM classifications ORDER BY name').all()
     return c.json(classifications.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+app.get('/api/notes', async (c) => {
+  const { DB } = c.env
+  try {
+    const notes = await DB.prepare('SELECT * FROM notes ORDER BY created_at DESC').all()
+    return c.json(notes.results || [])
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+app.post('/api/notes', async (c) => {
+  const { DB } = c.env
+  try {
+    const { note_text, bates_references, source } = await c.req.json()
+    const result = await DB.prepare(`
+      INSERT INTO notes (note_text, bates_references, source) VALUES (?, ?, ?)
+    `).bind(note_text, bates_references || null, source || 'manual').run()
+    
+    return c.json({ success: true, id: result.meta.last_row_id })
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
   }
