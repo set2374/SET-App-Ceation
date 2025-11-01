@@ -1,0 +1,44 @@
+================================
+COPY THIS MESSAGE TO CLAUDE AI
+================================
+
+Hi Claude! I'm Stephen Turman, an attorney who built an AI-powered eDiscovery platform. I'd like your review of the architecture and implementation.
+
+PROJECT: TLS eDiscovery Platform (NotebookLM-style interface)
+REPOSITORY: https://github.com/set2374/SET-App-Ceation
+
+START HERE:
+https://github.com/set2374/SET-App-Ceation/blob/main/CLAUDE_AI_REVIEW.md
+
+This document contains:
+✓ Complete project overview
+✓ Links to all key files and documentation
+✓ Specific questions for you to assess
+✓ Technology stack and architecture details
+✓ Live demo link for testing
+
+QUICK OVERVIEW:
+- Built with Cloudflare Workers/Pages, D1 database, R2 storage
+- PDF.js for text extraction + Tesseract.js OCR for scanned docs
+- Anthropic Claude API integration for legal analysis
+- Automatic Bates numbering, privilege detection, hallucination detection
+- Full-text search across 1000s of pages
+
+WHAT I NEED:
+1. Architecture review (is Cloudflare edge stack appropriate?)
+2. Security assessment (handling confidential legal documents)
+3. Scalability concerns (will it handle 10,000+ documents?)
+4. Code quality feedback
+5. Performance optimization suggestions
+6. Missing features for legal compliance
+
+LIVE DEMO:
+https://3000-iv0z4oopp52b5y23h8w7n-0e616f0a.sandbox.novita.ai
+(You can upload PDFs, test OCR, search, and chat with AI)
+
+Please read the review document and provide your comprehensive assessment. Thank you!
+
+Stephen Turman
+Turman Legal Solutions PLLC
+
+================================
