@@ -10,11 +10,14 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 
 - **Three-Panel NotebookLM Interface**: Document library, PDF viewer, and AI analysis panels
 - **AI-Powered Document Analysis**: Claude Sonnet 4.5 integration for privilege detection and hot document identification
+- **Automatic Text Extraction**: PDF.js-powered client-side text extraction with page-level indexing
+- **Full-Text Search**: Search across all document content with Bates number references and page navigation
+- **Page-Level Bates Indexing**: Each page stored with individual Bates number for precise citations
 - **Configurable Bates Numbering**: Per-matter Bates number formats with automatic assignment
 - **Classification System**: Hot Document, Privileged, Bad Document, Key Witness, Exhibit, Needs Review
 - **Note-Taking System**: Document-level and page-level annotations with rich text support
 - **Privilege Log Automation**: Auto-populated privilege logs with Excel export and clickable Bates number hyperlinks
-- **Search Functionality**: Full-text search across documents and notes
+- **AI Hallucination Detection**: Citation verification to prevent false Bates references
 - **Multi-Matter Support**: Separate matters with independent Bates numbering schemes
 
 ## URLs
@@ -22,7 +25,7 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 - **Production**: https://32acf0ba.tls-ediscovery.pages.dev (LIVE - Latest)
 - **Previous**: https://c9ce2d57.tls-ediscovery.pages.dev
 - **Local Development**: http://localhost:3000
-- **Sandbox**: https://3000-iv0z4oopp52b5y23h8w7n-ad490db5.sandbox.novita.ai
+- **Sandbox**: https://3000-iv0z4oopp52b5y23h8w7n-0e616f0a.sandbox.novita.ai (ACTIVE NOW)
 
 ## Technology Stack
 
@@ -123,9 +126,14 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
    - PDF viewer in left panel with browser-native rendering
    - Clickable document cards and Bates citations open specific PDFs
    - Upload progress notifications
+   - **NEW: Automatic PDF.js text extraction** after upload
+   - **NEW: Page-level text indexing** with individual Bates numbers per page
+   - **NEW: Full-text search** across all document content
+   - **NEW: Search results** with highlighted snippets and page navigation
+   - **NEW: Direct PDF navigation** to specific pages from search results
 
 6. **Priority A: Claude Sonnet 4.5 AI Integration** ✅
-   - Anthropic Claude API integration with claude-sonnet-4-20250514 model
+   - Anthropic Claude API integration (currently using claude-3-haiku-20240307, upgradeable to Claude 4.5 Sonnet)
    - Conversational AI interface in center panel
    - Source document selection via checkboxes for context-aware analysis
    - Legal-specific system prompts for privilege detection and hot document identification
@@ -135,6 +143,9 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
    - 200K token context windows for document analysis
    - Markdown rendering of AI responses
    - Professional legal analysis with confidence levels
+   - **NEW: AI hallucination detection** - verifies all Bates citations against actual documents
+   - **NEW: Visual warnings** for hallucinated citations with red borders and critical alerts
+   - **NEW: Citation validation** - color-coded citations (blue=validated, red=hallucinated)
 
 7. **Priority C: Reports Generation System** ✅
    - Three automated report types with proper error handling
@@ -160,8 +171,11 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
    - AI-suggested classifications with attorney confirmation workflow
    - Confidence score display and justification entry
 
-10. **OCR Text Extraction**
-    - Cloud OCR API integration (AWS Textract, Google Document AI, or Adobe Extract)
+10. **Vision-Based OCR Fallback** (for scanned documents)
+    - PDF page-to-image conversion using Cloudflare Workers
+    - Claude 4.5 Sonnet Vision API integration for OCR
+    - Automatic fallback when PDF.js extraction yields poor results
+    - OCR confidence scoring per page
     - Extracted text storage in documents.extracted_text column
     - Full-text search across document contents
     - Enhanced Claude analysis with actual document text (not just metadata)
