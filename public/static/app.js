@@ -330,14 +330,47 @@ async function sendChatMessage() {
     // Remove loading message
     removeChatMessage(loadingId);
     
-    // Format response with clickable Bates citations
-    let formattedResponse = data.response;
+    // Check for hallucinations and add warning
+    let formattedResponse = '';
+    
+    if (data.hallucination_detected && data.hallucinated_citations && data.hallucinated_citations.length > 0) {
+      formattedResponse += `<div class="bg-red-50 border-2 border-red-500 rounded-lg p-4 mb-4">
+        <div class="flex items-start space-x-3">
+          <svg class="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <h4 class="font-bold text-red-900 text-sm">⚠️ AI HALLUCINATION DETECTED</h4>
+            <p class="text-red-800 text-xs mt-1">
+              <strong>CRITICAL WARNING:</strong> The AI referenced non-existent document(s): 
+              <strong>${data.hallucinated_citations.join(', ')}</strong>
+            </p>
+            <p class="text-red-700 text-xs mt-2">
+              <strong>Do NOT rely on this response.</strong> Verify all Bates citations against actual uploaded documents before using this analysis.
+            </p>
+          </div>
+        </div>
+      </div>`;
+    }
+    
+    formattedResponse += data.response;
     
     // Convert [BATES: VQ-000001] format to clickable links
+    // Mark hallucinated citations in red, validated in blue
     formattedResponse = formattedResponse.replace(
       /\[BATES: ([^\]]+)\]/g,
-      '<span class="bates-citation" data-bates="$1">$1</span>'
+      (match, bates) => {
+        const isHallucinated = data.hallucinated_citations && data.hallucinated_citations.includes(bates);
+        const color = isHallucinated ? 'text-red-600 bg-red-100 border-red-300' : 'text-blue-600 bg-blue-50 border-blue-200';
+        const cursor = isHallucinated ? 'cursor-not-allowed' : 'cursor-pointer';
+        return `<span class="bates-citation ${color} ${cursor} px-2 py-1 rounded border font-mono text-xs" data-bates="${bates}" data-hallucinated="${isHallucinated}">${bates}</span>`;
+      }
     );
+    
+    // Add disclaimer for AI-generated content
+    formattedResponse += `\n\n<div class="text-xs text-gray-500 italic mt-3 border-t pt-2">
+      ⚖️ <strong>Legal Notice:</strong> AI-generated analysis requires attorney review before use in litigation or privilege assertions.
+    </div>`;
     
     // Add save to notes button
     formattedResponse += '\n\n<button class="save-to-notes-btn mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save to Notes</button>';

@@ -943,7 +943,7 @@ ${documentsContext || '[No documents selected - user may be asking a general que
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-3-5-20241022',
+        model: 'claude-3-5-sonnet-latest',
         max_tokens: 4096,
         messages: [
           {
@@ -969,6 +969,21 @@ ${documentsContext || '[No documents selected - user may be asking a general que
       match.replace('[BATES: ', '').replace(']', '')
     ) || []
     
+    // Verify Bates citations to detect hallucinations
+    let validatedCitations: string[] = []
+    let hallucinations: string[] = []
+    
+    if (batesCitations.length > 0) {
+      const placeholders = batesCitations.map(() => '?').join(',')
+      const validDocs = await DB.prepare(`
+        SELECT bates_start FROM documents 
+        WHERE matter_id = ? AND bates_start IN (${placeholders})
+      `).bind(matter_id || 1, ...batesCitations).all()
+      
+      validatedCitations = validDocs.results?.map((doc: any) => doc.bates_start) || []
+      hallucinations = batesCitations.filter(citation => !validatedCitations.includes(citation))
+    }
+    
     // Save to chat history
     await DB.prepare(`
       INSERT INTO chat_history (matter_id, user_message, ai_response, bates_citations)
@@ -983,8 +998,14 @@ ${documentsContext || '[No documents selected - user may be asking a general que
     return c.json({
       response: aiResponse,
       bates_citations: batesCitations,
-      model: 'claude-sonnet-4-20250514',
-      tokens_used: data.usage?.input_tokens + data.usage?.output_tokens || 0
+      validated_citations: validatedCitations,
+      hallucinated_citations: hallucinations,
+      hallucination_detected: hallucinations.length > 0,
+      model: 'claude-3-5-sonnet-latest',
+      tokens_used: data.usage?.input_tokens + data.usage?.output_tokens || 0,
+      warning: hallucinations.length > 0 
+        ? `⚠️ WARNING: AI referenced non-existent document(s): ${hallucinations.join(', ')}. Verify all citations before relying on this analysis.`
+        : null
     })
   } catch (error: any) {
     console.error('Chat error:', error)
