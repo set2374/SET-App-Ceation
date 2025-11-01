@@ -1,12 +1,16 @@
-# PDF Text Extraction & Search Implementation Summary
+# PDF Text Extraction, OCR & Search Implementation Summary
 
-**Date**: 2025-11-01  
-**Feature**: Automatic PDF.js text extraction with full-text search  
-**Status**: ✅ COMPLETED AND TESTED
+**Date**: 2025-11-01
+**Feature**: Automatic PDF.js text extraction with OCR fallback and full-text search
+**Status**: ✅ COMPLETED AND PRODUCTION-READY
 
 ## What Was Built
 
-I implemented a comprehensive PDF text extraction and search system for your TLS eDiscovery Platform. The system automatically extracts text from uploaded PDFs, indexes it with page-level Bates numbering, and enables full-text search with direct navigation to specific pages.
+I implemented a comprehensive PDF text extraction and search system for your TLS eDiscovery Platform. The system automatically extracts text from uploaded PDFs (both native and scanned), indexes it with page-level Bates numbering, and enables full-text search with direct navigation to specific pages.
+
+### 🆕 OCR for Scanned Documents
+
+The platform now includes **intelligent OCR (Optical Character Recognition)** that automatically detects scanned PDFs and extracts text using Tesseract.js. This makes ALL documents searchable, including legacy scanned discovery materials.
 
 ## Technical Implementation
 
@@ -32,20 +36,45 @@ I implemented a comprehensive PDF text extraction and search system for your TLS
 
 ### Frontend JavaScript (PDF.js Integration)
 
-**1. Automatic Extraction Function**
+**1. Automatic Extraction Function (with OCR Fallback)**
 ```javascript
 async function extractTextFromPDF(file, documentId, batesStart) {
   // Configures PDF.js worker
   // Reads PDF as ArrayBuffer
   // Extracts text from each page sequentially
   // Shows progress: "Extracting: 10/50 pages..."
+
+  // 🆕 Detect scanned PDFs
+  // If avgCharsPerPage < 50, trigger OCR
+  if (isScannedPDF) {
+    // Initialize Tesseract.js OCR engine
+    // Render each page to canvas at 2x resolution
+    // Run OCR on each page image
+    // Show progress: "🔍 OCR processing page 5/15 (87% confidence)"
+    // Replace extraction with OCR results
+  }
+
   // Sends page data to backend endpoint
-  // Shows success notification with Bates range
+  // Shows success notification with extraction method ("OCR" or "native text")
   // Handles errors gracefully without failing upload
 }
 ```
 
-**2. Search Interface**
+**2. OCR Processing Function**
+```javascript
+async function extractTextWithOCR(arrayBuffer, pdf, pageCount, filename) {
+  // Initialize Tesseract worker with English language
+  // For each page:
+  //   - Render PDF page to canvas (high resolution)
+  //   - Convert canvas to PNG image
+  //   - Run Tesseract OCR
+  //   - Collect text with confidence scores (0.0 - 1.0)
+  // Terminate worker
+  // Return pages array with OCR text
+}
+```
+
+**3. Search Interface**
 ```javascript
 // Modified handleFileUpload() to call extractTextFromPDF() after upload
 // Added input event listener to source-search with 500ms debounce
@@ -54,7 +83,7 @@ async function extractTextFromPDF(file, documentId, batesStart) {
 // Enhanced openPDFViewer(docId, pageNumber) with page navigation
 ```
 
-**3. Search Results Display**
+**4. Search Results Display**
 ```javascript
 // Yellow-highlighted documents with matches
 // Page-level results with Bates numbers and snippets

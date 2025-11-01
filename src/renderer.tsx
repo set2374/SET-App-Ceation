@@ -9,6 +9,7 @@ export const renderer = jsxRenderer(({ children }) => {
         <title>TLS eDiscovery Platform - Turman Legal Solutions</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
         <link href="/static/style.css" rel="stylesheet" />
       </head>
       <body>{children}

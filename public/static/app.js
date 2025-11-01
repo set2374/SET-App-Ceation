@@ -928,53 +928,78 @@ async function handleFileUpload(event) {
   event.target.value = '';
 }
 
-// Extract text from PDF using PDF.js
+// Extract text from PDF using PDF.js (with OCR fallback for scanned PDFs)
 async function extractTextFromPDF(file, documentId, batesStart) {
   try {
     showNotification(`Extracting text from ${file.name}...`, 'info');
-    
+
     // Configure PDF.js worker
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    
+
     // Read file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
-    
+
     // Load PDF document
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
-    
+
     const pageCount = pdf.numPages;
     const pages = [];
     let fullText = '';
-    
+
     // Extract text from each page
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-      
+
       // Concatenate text items with spaces
       const pageText = textContent.items
         .map(item => item.str)
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
-      
+
       pages.push({
         page_number: pageNum,
         text: pageText,
         confidence: 1.0  // PDF.js extraction has 100% confidence (native text)
       });
-      
+
       fullText += pageText + '\n\n';
-      
+
       // Show progress
       if (pageNum % 10 === 0 || pageNum === pageCount) {
         showNotification(`Extracting: ${pageNum}/${pageCount} pages...`, 'info');
       }
     }
-    
+
+    // Detect if this is a scanned PDF (minimal text extracted)
+    const avgCharsPerPage = fullText.length / pageCount;
+    const isScannedPDF = avgCharsPerPage < 50; // Less than 50 chars/page indicates scanned document
+
+    if (isScannedPDF) {
+      showNotification(`📷 Scanned PDF detected! Running OCR on ${file.name}...`, 'info');
+      console.log(`Scanned PDF detected: ${avgCharsPerPage.toFixed(1)} chars/page. Triggering OCR...`);
+
+      // Run OCR on each page
+      const ocrPages = await extractTextWithOCR(arrayBuffer, pdf, pageCount, file.name);
+
+      // Replace pages with OCR results
+      if (ocrPages && ocrPages.length > 0) {
+        pages.length = 0; // Clear existing pages
+        fullText = '';
+
+        for (const ocrPage of ocrPages) {
+          pages.push(ocrPage);
+          fullText += ocrPage.text + '\n\n';
+        }
+
+        showNotification(`✓ OCR completed: ${pages.length} pages processed`, 'success');
+      }
+    }
+
     // Send extracted text to backend
     const response = await fetch(`/api/documents/${documentId}/extract-text`, {
       method: 'POST',
@@ -984,38 +1009,151 @@ async function extractTextFromPDF(file, documentId, batesStart) {
       body: JSON.stringify({
         pages: pages,
         full_text: fullText.trim(),
-        page_count: pageCount
+        page_count: pageCount,
+        ocr_processed: isScannedPDF
       })
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Text extraction failed');
     }
-    
+
     const result = await response.json();
     console.log('Text extraction successful:', result);
+
+    const extractionMethod = isScannedPDF ? 'OCR' : 'native text';
     showNotification(
-      `✓ Extracted ${result.pages_extracted} pages from ${file.name} (${result.bates_range})`, 
+      `✓ Extracted ${result.pages_extracted} pages from ${file.name} via ${extractionMethod} (${result.bates_range})`,
       'success'
     );
-    
+
     return result;
-    
+
   } catch (error) {
     console.error('Text extraction error:', error);
     showNotification(`Text extraction failed for ${file.name}: ${error.message}`, 'error');
-    
+
     // Don't throw - allow upload to succeed even if extraction fails
     // User can manually trigger extraction later or use OCR fallback
     return null;
   }
 }
 
-// Utility: Show notification
+// Extract text using OCR (Tesseract.js) for scanned PDFs
+async function extractTextWithOCR(arrayBuffer, pdf, pageCount, filename) {
+  try {
+    const pages = [];
+
+    // Initialize Tesseract worker
+    showNotification(`Initializing OCR engine...`, 'info');
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log(`OCR progress: ${(m.progress * 100).toFixed(0)}%`);
+        }
+      }
+    });
+
+    // Process each page
+    for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+      showNotification(`🔍 OCR processing page ${pageNum}/${pageCount}...`, 'info');
+
+      // Get PDF page
+      const page = await pdf.getPage(pageNum);
+
+      // Render page to canvas at high resolution for better OCR accuracy
+      const scale = 2.0; // 2x resolution
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      // Render PDF page to canvas
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+
+      // Convert canvas to image data for Tesseract
+      const imageData = canvas.toDataURL('image/png');
+
+      // Run OCR
+      const { data } = await worker.recognize(imageData);
+
+      pages.push({
+        page_number: pageNum,
+        text: data.text.trim(),
+        confidence: data.confidence / 100.0  // Convert 0-100 to 0-1
+      });
+
+      console.log(`OCR page ${pageNum}: ${data.text.length} chars, confidence: ${data.confidence.toFixed(1)}%`);
+
+      // Show progress every 5 pages or on last page
+      if (pageNum % 5 === 0 || pageNum === pageCount) {
+        const avgConfidence = pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length;
+        showNotification(
+          `OCR: ${pageNum}/${pageCount} pages (avg confidence: ${(avgConfidence * 100).toFixed(0)}%)`,
+          'info'
+        );
+      }
+    }
+
+    // Terminate worker
+    await worker.terminate();
+
+    const avgConfidence = pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length;
+    console.log(`OCR complete: ${pages.length} pages, avg confidence: ${(avgConfidence * 100).toFixed(1)}%`);
+
+    return pages;
+
+  } catch (error) {
+    console.error('OCR error:', error);
+    showNotification(`OCR failed: ${error.message}`, 'error');
+    return null;
+  }
+}
+
+// Utility: Show notification (toast UI)
 function showNotification(message, type = 'info') {
   console.log(`[${type.toUpperCase()}] ${message}`);
-  // TODO: Implement toast notification UI
+
+  // Create toast notification
+  const toast = document.createElement('div');
+  toast.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 z-50 animate-slide-in max-w-md`;
+
+  // Style based on type
+  const styles = {
+    info: 'bg-blue-600 text-white',
+    success: 'bg-green-600 text-white',
+    error: 'bg-red-600 text-white',
+    warning: 'bg-yellow-600 text-white'
+  };
+
+  const icons = {
+    info: '🔷',
+    success: '✓',
+    error: '✗',
+    warning: '⚠'
+  };
+
+  toast.className += ` ${styles[type] || styles.info}`;
+
+  toast.innerHTML = `
+    <span class="text-lg">${icons[type] || icons.info}</span>
+    <span class="text-sm flex-1">${escapeHtml(message)}</span>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Auto remove after 5 seconds
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
 }
 
 // Utility: Escape HTML

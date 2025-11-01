@@ -11,7 +11,8 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 - **Three-Panel NotebookLM Interface**: Document library, PDF viewer, and AI analysis panels
 - **AI-Powered Document Analysis**: Claude Sonnet 4.5 integration for privilege detection and hot document identification
 - **Automatic Text Extraction**: PDF.js-powered client-side text extraction with page-level indexing
-- **Full-Text Search**: Search across all document content with Bates number references and page navigation
+- **🆕 OCR for Scanned PDFs**: Intelligent Tesseract.js OCR automatically detects and processes scanned documents
+- **Full-Text Search**: Search across all document content (native and OCR'd) with Bates number references and page navigation
 - **Page-Level Bates Indexing**: Each page stored with individual Bates number for precise citations
 - **Configurable Bates Numbering**: Per-matter Bates number formats with automatic assignment
 - **Classification System**: Hot Document, Privileged, Bad Document, Key Witness, Exhibit, Needs Review
@@ -34,6 +35,8 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 - **Database**: Cloudflare D1 (SQLite) - Serverless SQL database
 - **Storage**: Cloudflare R2 - Object storage for PDF documents
 - **AI Model**: Anthropic Claude Sonnet 4.5 - Document analysis and privilege detection
+- **Text Extraction**: PDF.js (v3.11.174) - Native PDF text extraction + page rendering
+- **🆕 OCR Engine**: Tesseract.js (v5.0) - Client-side OCR for scanned documents
 - **Frontend**: TailwindCSS + Vanilla JavaScript
 - **Deployment**: Wrangler CLI
 
@@ -127,8 +130,12 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
    - Clickable document cards and Bates citations open specific PDFs
    - Upload progress notifications
    - **NEW: Automatic PDF.js text extraction** after upload
+   - **🆕 Intelligent OCR fallback** for scanned PDFs (Tesseract.js)
+   - **🆕 Automatic scanned PDF detection** (< 50 chars/page avg)
+   - **🆕 High-resolution OCR processing** (2x scale, 80-95% accuracy)
+   - **🆕 OCR progress tracking** with confidence scores per page
    - **NEW: Page-level text indexing** with individual Bates numbers per page
-   - **NEW: Full-text search** across all document content
+   - **NEW: Full-text search** across all document content (native + OCR)
    - **NEW: Search results** with highlighted snippets and page navigation
    - **NEW: Direct PDF navigation** to specific pages from search results
 
