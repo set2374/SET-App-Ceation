@@ -582,6 +582,120 @@ app.get('/api/documents', async (c) => {
   }
 })
 
+// Save extracted text and page data
+app.post('/api/documents/:id/extract-text', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    const documentId = c.req.param('id')
+    const { pages, full_text, page_count } = await c.req.json()
+    
+    if (!pages || !Array.isArray(pages)) {
+      return c.json({ error: 'Pages array required' }, 400)
+    }
+    
+    // Get document info for Bates numbering
+    const doc = await DB.prepare('SELECT * FROM documents WHERE id = ?').bind(documentId).first() as any
+    if (!doc) {
+      return c.json({ error: 'Document not found' }, 404)
+    }
+    
+    // Parse Bates start number
+    const batesPrefix = doc.bates_start.split('-')[0]
+    const startNumber = parseInt(doc.bates_start.split('-')[1])
+    
+    // Save page-level text with Bates numbers
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i]
+      const pageNumber = i + 1
+      const pageBates = `${batesPrefix}-${String(startNumber + i).padStart(6, '0')}`
+      
+      await DB.prepare(`
+        INSERT INTO document_pages (document_id, page_number, bates_number, page_text, ocr_confidence)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(documentId, pageNumber, pageBates, page.text || '', page.confidence || 1.0).run()
+    }
+    
+    // Update document with full text and correct page count
+    const actualBatesEnd = `${batesPrefix}-${String(startNumber + pages.length - 1).padStart(6, '0')}`
+    
+    await DB.prepare(`
+      UPDATE documents 
+      SET extracted_text = ?, 
+          text_extracted = TRUE, 
+          page_count = ?,
+          bates_end = ?,
+          review_status = 'extracted'
+      WHERE id = ?
+    `).bind(full_text || '', pages.length, actualBatesEnd, documentId).run()
+    
+    // Update matter's next_bates_number if this document extended beyond original allocation
+    const matter = await DB.prepare('SELECT * FROM matters WHERE id = ?').bind(doc.matter_id).first() as any
+    const newNextNumber = startNumber + pages.length
+    if (newNextNumber > matter.next_bates_number) {
+      await DB.prepare('UPDATE matters SET next_bates_number = ? WHERE id = ?')
+        .bind(newNextNumber, doc.matter_id).run()
+    }
+    
+    return c.json({
+      success: true,
+      pages_extracted: pages.length,
+      bates_range: `${doc.bates_start} - ${actualBatesEnd}`,
+      searchable: true
+    })
+  } catch (error: any) {
+    console.error('Text extraction error:', error)
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Search documents by text content
+app.get('/api/documents/search', async (c) => {
+  const { DB } = c.env
+  
+  try {
+    const query = c.req.query('q')
+    const matterId = c.req.query('matter_id') || '1'
+    
+    if (!query || query.trim().length < 3) {
+      return c.json({ error: 'Search query must be at least 3 characters' }, 400)
+    }
+    
+    // Search in full document text
+    const documents = await DB.prepare(`
+      SELECT d.id, d.filename, d.bates_start, d.bates_end, d.page_count, d.upload_date
+      FROM documents d
+      WHERE d.matter_id = ? 
+        AND d.text_extracted = TRUE
+        AND d.extracted_text LIKE ?
+      ORDER BY d.upload_date DESC
+      LIMIT 50
+    `).bind(matterId, `%${query}%`).all()
+    
+    // Search in page-level text for more precise results
+    const pages = await DB.prepare(`
+      SELECT dp.*, d.filename, d.bates_start as doc_bates_start
+      FROM document_pages dp
+      JOIN documents d ON dp.document_id = d.id
+      WHERE d.matter_id = ?
+        AND dp.page_text LIKE ?
+      ORDER BY dp.document_id, dp.page_number
+      LIMIT 100
+    `).bind(matterId, `%${query}%`).all()
+    
+    return c.json({
+      success: true,
+      query: query,
+      documents: documents.results || [],
+      pages: pages.results || [],
+      total_results: (documents.results?.length || 0) + (pages.results?.length || 0)
+    })
+  } catch (error: any) {
+    console.error('Search error:', error)
+    return c.json({ error: error.message }, 500)
+  }
+})
+
 app.get('/api/classifications', async (c) => {
   const { DB } = c.env
   try {
@@ -943,7 +1057,7 @@ ${documentsContext || '[No documents selected - user may be asking a general que
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         messages: [
           {
@@ -1001,7 +1115,7 @@ ${documentsContext || '[No documents selected - user may be asking a general que
       validated_citations: validatedCitations,
       hallucinated_citations: hallucinations,
       hallucination_detected: hallucinations.length > 0,
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-3-haiku-20240307',
       tokens_used: data.usage?.input_tokens + data.usage?.output_tokens || 0,
       warning: hallucinations.length > 0 
         ? `⚠️ WARNING: AI referenced non-existent document(s): ${hallucinations.join(', ')}. Verify all citations before relying on this analysis.`
