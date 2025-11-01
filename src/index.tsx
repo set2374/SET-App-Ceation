@@ -811,6 +811,48 @@ app.post('/api/upload', async (c) => {
   }
 })
 
+// Delete document (removes from database and R2 storage)
+app.delete('/api/documents/:id', async (c) => {
+  const { DB, DOCUMENTS } = c.env
+  const docId = c.req.param('id')
+  
+  try {
+    // Get document metadata before deletion
+    const doc = await DB.prepare('SELECT * FROM documents WHERE id = ?').bind(docId).first() as any
+    if (!doc) {
+      return c.json({ error: 'Document not found' }, 404)
+    }
+    
+    // Delete from R2 storage
+    await DOCUMENTS.delete(doc.storage_path)
+    
+    // Delete page-level text data
+    await DB.prepare('DELETE FROM document_pages WHERE document_id = ?').bind(docId).run()
+    
+    // Delete document classifications
+    await DB.prepare('DELETE FROM document_classifications WHERE document_id = ?').bind(docId).run()
+    
+    // Delete notes associated with document
+    await DB.prepare('DELETE FROM notes WHERE document_id = ?').bind(docId).run()
+    
+    // Delete the document record
+    await DB.prepare('DELETE FROM documents WHERE id = ?').bind(docId).run()
+    
+    return c.json({
+      success: true,
+      message: 'Document deleted successfully',
+      deleted_document: {
+        id: doc.id,
+        filename: doc.filename,
+        bates_start: doc.bates_start
+      }
+    })
+  } catch (error: any) {
+    console.error('Delete error:', error)
+    return c.json({ error: error.message }, 500)
+  }
+})
+
 // Get PDF from R2 storage
 app.get('/api/document/:id', async (c) => {
   const { DB, DOCUMENTS } = c.env
