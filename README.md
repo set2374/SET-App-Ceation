@@ -28,6 +28,29 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 - **Local Development**: http://localhost:3000
 - **Sandbox**: https://3000-iv0z4oopp52b5y23h8w7n-0e616f0a.sandbox.novita.ai (ACTIVE NOW)
 
+## 🤖 Share with Claude AI for Review
+
+**Want Claude AI to review this project?** Three easy ways:
+
+### Option 1: Quick Copy/Paste (Easiest)
+1. Open [SHARE_WITH_CLAUDE.txt](SHARE_WITH_CLAUDE.txt)
+2. Copy the entire contents
+3. Paste into your conversation with Claude AI
+
+### Option 2: Share Review Document
+Send Claude this link: [CLAUDE_AI_REVIEW.md](CLAUDE_AI_REVIEW.md)
+
+### Option 3: Full Instructions
+Read the complete guide: [HOW_TO_SHARE_WITH_CLAUDE_AI.md](HOW_TO_SHARE_WITH_CLAUDE_AI.md)
+
+**What Claude will review:**
+- Architecture & technology stack decisions
+- Security for confidential legal documents
+- Performance & scalability to 10,000+ documents
+- OCR implementation (client-side vs server-side)
+- Code quality & best practices
+- Legal compliance gaps
+
 ## Technology Stack
 
 - **Backend**: Hono (v4.10.4) - Lightweight web framework for Cloudflare Workers
