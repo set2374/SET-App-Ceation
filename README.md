@@ -9,6 +9,7 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 ### Key Features
 
 - **Three-Panel NotebookLM Interface**: Document library, PDF viewer, and AI analysis panels
+- **Mobile-Optimized Interface**: Responsive design with swipeable panels for mobile portrait mode
 - **AI-Powered Document Analysis**: Claude Sonnet 4.5 integration for privilege detection and hot document identification
 - **Automatic Text Extraction**: PDF.js-powered client-side text extraction with page-level indexing
 - **Full-Text Search**: Search across all document content with Bates number references and page navigation
@@ -19,13 +20,16 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 - **Privilege Log Automation**: Auto-populated privilege logs with Excel export and clickable Bates number hyperlinks
 - **AI Hallucination Detection**: Citation verification to prevent false Bates references
 - **Multi-Matter Support**: Separate matters with independent Bates numbering schemes
+- **Document Deletion**: Permanent document removal with cascading cleanup of all related data
 
 ## URLs
 
-- **Production**: https://32acf0ba.tls-ediscovery.pages.dev (LIVE - Latest)
-- **Previous**: https://c9ce2d57.tls-ediscovery.pages.dev
-- **Local Development**: http://localhost:3000
-- **Sandbox**: https://3000-iv0z4oopp52b5y23h8w7n-0e616f0a.sandbox.novita.ai (ACTIVE NOW)
+- **Production v2.0.4**: https://59f701f2.tls-ediscovery.pages.dev (LIVE - Latest with Mobile Portrait Swipe)
+- **Previous v2.0.3**: https://d72bb3e5.tls-ediscovery.pages.dev (iOS Orientation Fixes)
+- **Previous v2.0.2**: https://de29053b.tls-ediscovery.pages.dev (Mobile Responsive)
+- **Previous v2.0.1**: https://16accbb3.tls-ediscovery.pages.dev (Delete Feature)
+- **v1.0.0**: https://32acf0ba.tls-ediscovery.pages.dev (Original NotebookLM)
+- **GitHub Repository**: https://github.com/set2374/SET-App-Ceation
 
 ## Technology Stack
 
@@ -499,6 +503,10 @@ For internal use only.
 
 ---
 
-**Last Updated**: October 31, 2025  
-**Version**: 1.1.0 (Production)  
-**Status**: ✅ DEPLOYED TO PRODUCTION | Multi-Matter Support Added | Ready for Document Testing
+**Last Updated**: November 10, 2025  
+**Version**: 2.0.4 (Production)  
+**Status**: ✅ DEPLOYED TO PRODUCTION  
+**Latest Feature**: Mobile Portrait Swipe Navigation with Panel Indicators  
+**Testing Device**: iPhone 15 Pro Max  
+**Repository**: https://github.com/set2374/SET-App-Ceation  
+**Git Tag**: v2.0.4

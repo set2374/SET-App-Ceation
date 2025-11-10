@@ -5,6 +5,115 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2025-11-10
+
+### Added
+- **Mobile Portrait Swipe Navigation**: Complete redesign of mobile portrait mode
+  - Horizontal swipeable full-screen panels (100vw each)
+  - CSS scroll-snap-type: x mandatory for iOS-native swipe behavior
+  - Visual panel indicators at bottom (3 dots showing current panel)
+  - Active indicator expands to pill shape (24px width)
+  - Previous/Next navigation buttons (44px touch targets)
+  - Buttons disabled at panel boundaries (prev on panel 0, next on panel 2)
+  - Panel headers with emojis: "📚 Sources", "💬 Chat", "📝 Notes & Reports"
+  - JavaScript scroll position tracking with automatic indicator updates
+  - Smooth scroll behavior for programmatic panel navigation
+
+- **Chat Readability Improvements**:
+  - Enlarged chat message text to 16px minimum (was too small)
+  - Increased line-height to 1.6 for better readability
+  - Enlarged chat message padding to 1rem
+  - Font size prevents iOS auto-zoom on input focus
+
+### Fixed
+- Portrait mode chat window now readable (previously "virtually impossible to read")
+- Users can now swipe between three panels in portrait mode
+- Scroll snap prevents panels from stopping mid-transition
+- -webkit-overflow-scrolling: touch for momentum scrolling on iOS
+
+### Technical
+- `setupPanelSwipeNavigation()` function in app.js
+- `createPanelIndicators()` creates fixed bottom indicator dots
+- `createNavigationButtons()` creates prev/next buttons
+- `updatePanelIndicators()` tracks scroll position and updates UI
+- `navigateToPanel(index)` handles programmatic navigation
+- Event listeners re-initialized on orientation change
+- Passive scroll event listeners for better performance
+
+### Deployment
+- URL: https://59f701f2.tls-ediscovery.pages.dev
+- Git Tag: v2.0.4
+- Commit: ec09bb2
+
+---
+
+## [2.0.3] - 2025-11-10
+
+### Fixed
+- **iOS Safari Orientation Issues**: Fixed landscape mode not working on iPhone 15 Pro Max
+  - Added !important flags to override Tailwind CSS classes
+  - Implemented data-orientation attribute for precise CSS targeting
+  - Triple orientation detection: screen.orientation API, window.orientation legacy, fallback
+  - Force layout reflow on orientation change to trigger CSS updates
+  - Multiple event listeners with 100ms delays for iOS timing issues
+
+### Technical
+- Enhanced `handleOrientationChange()` function with multiple detection methods
+- Added `body[data-orientation="landscape"]` and `body[data-orientation="portrait"]` CSS rules
+- Force display:none/display:'' cycle to trigger reflow
+
+### Deployment
+- URL: https://d72bb3e5.tls-ediscovery.pages.dev
+- Git Tag: v2.0.3
+
+---
+
+## [2.0.2] - 2025-11-10
+
+### Added
+- **Mobile Responsive Design**: Initial mobile and tablet support
+  - Viewport meta tags optimized for mobile devices
+  - Mobile device and tablet detection in JavaScript
+  - Orientation change handling with screen.orientation API
+  - Orientation suggestion banner for portrait users
+  - 400+ lines of responsive CSS for all device sizes
+  - Touch-optimized interface elements (44px minimum touch targets)
+
+### Technical
+- `setupMobileOptimizations()` function
+- `handleOrientationChange()` function
+- `showOrientationSuggestion()` banner with dismiss functionality
+- Media queries for mobile portrait, mobile landscape, tablet portrait, tablet landscape
+- Safe area insets for devices with notches
+
+### Deployment
+- URL: https://de29053b.tls-ediscovery.pages.dev
+- Git Tag: v2.0.2
+
+---
+
+## [2.0.1] - 2025-11-10
+
+### Added
+- **Delete Document Feature**: Ability to permanently delete documents
+  - New endpoint: `DELETE /api/documents/:id`
+  - Cascading deletion: R2 storage file, database records, pages, classifications, notes
+  - Confirmation dialog showing document details before deletion
+  - Trash icon button in document cards
+  - Success/error notifications with document filename
+
+### Technical
+- Backend endpoint in `src/index.tsx`
+- Frontend `deleteDocument(docId, filename)` function in app.js
+- Confirmation dialog with detailed warning about permanent deletion
+- Automatic document list refresh after successful deletion
+
+### Deployment
+- URL: https://16accbb3.tls-ediscovery.pages.dev
+- Git Tag: v2.0.1
+
+---
+
 ## [2.0.0] - 2025-11-01
 
 ### Added
