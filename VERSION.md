@@ -1,10 +1,82 @@
 # TLS eDiscovery Platform - Version History
 
-## Current Version: 2.0.0 (2025-11-01)
+## Current Version: 2.0.4 (2025-11-10)
 
 **Code Name**: "SearchMaster"  
 **Status**: Ready for Deployment  
 **Branch**: main
+
+### Version 2.0.4 - Mobile Portrait Swipe Navigation
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### New Features
+1. **Mobile Portrait Mode Improvements**
+   - Horizontal swipeable panels (full-screen width each)
+   - iOS-native scroll snap behavior for smooth panel transitions
+   - Visual panel indicators (3 dots at bottom showing current panel)
+   - Previous/Next navigation buttons for manual panel switching
+   - Panel headers showing "📚 Sources", "💬 Chat", "📝 Notes & Reports"
+   - Enlarged chat text for better readability (16px minimum)
+
+#### Technical Improvements
+- CSS scroll-snap-type: x mandatory for iOS compatibility
+- JavaScript scroll position tracking with debouncing
+- Dynamic indicator updates based on scroll position
+- Disabled navigation buttons at panel boundaries
+- -webkit-overflow-scrolling: touch for momentum scrolling
+
+#### User Experience Enhancements
+- Chat window now readable in portrait mode
+- Easy swiping between three full-screen panels
+- Clear visual feedback showing current panel (1 of 3)
+- Touch-optimized navigation buttons (44px minimum)
+
+---
+
+### Version 2.0.3 - iOS Orientation Fixes
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### Bug Fixes
+- Fixed iOS Safari not responding to orientation changes
+- Fixed Tailwind CSS classes overriding responsive layouts
+- Fixed single-column layout appearing on iPhone 15 Pro Max
+
+#### Technical Solutions
+- Override Tailwind with !important flags in responsive CSS
+- Added data-orientation attribute for precise CSS targeting
+- Triple orientation detection (screen.orientation API, window.orientation legacy, fallback)
+- Force layout reflow on orientation change
+- Multiple event listeners with 100ms delays for iOS timing issues
+
+---
+
+### Version 2.0.2 - Mobile Responsive Design
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### New Features
+- Viewport meta tags optimized for mobile devices
+- Mobile device and tablet detection
+- Orientation change handling
+- Orientation suggestion banner for better UX
+- Touch-optimized interface elements
+
+---
+
+### Version 2.0.1 - Delete Document Feature
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### New Features
+- Delete document endpoint: DELETE `/api/documents/:id`
+- Cascading deletion (R2 file, database records, pages, classifications, notes)
+- Confirmation dialog with document details
+- Trash icon UI in document cards
+- Success/error notifications
+
+---
 
 ### Version 2.0.0 - Major Feature Release
 **Release Date**: 2025-11-01  

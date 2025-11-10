@@ -386,46 +386,114 @@ body {
   }
 }
 
-/* Mobile Portrait (Phone vertical) - Stack panels vertically */
+/* Mobile Portrait (Phone vertical) - Swipeable full-screen panels */
 @media (max-width: 768px) and (orientation: portrait) {
-  /* Force body to allow horizontal scroll if needed */
+  /* Force body to allow horizontal scroll */
   body {
-    overflow-x: auto;
-    min-width: 100vw;
+    overflow-x: hidden;
+    width: 100vw;
   }
   
-  /* Override Tailwind flex classes to force column layout */
+  /* Override Tailwind flex classes to force horizontal scroll layout */
   .flex-1.flex.overflow-hidden {
-    flex-direction: column !important;
+    flex-direction: row !important;
     display: flex !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+    position: relative !important;
   }
   
-  /* Stack three panels vertically */
+  /* Each panel is full-screen width and swipeable */
   .flex-1.flex.overflow-hidden > div {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    min-height: 300px !important;
+    width: 100vw !important;
+    min-width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100% !important;
     flex: none !important;
+    scroll-snap-align: start !important;
+    overflow-y: auto !important;
   }
   
-  /* Left panel (sources) - collapse by default */
-  .flex.overflow-hidden > div:first-child {
-    max-height: 40vh;
-    overflow-y: auto;
+  /* Hide scrollbar but keep functionality */
+  .flex-1.flex.overflow-hidden::-webkit-scrollbar {
+    display: none;
   }
   
-  /* Center panel (chat) - main focus */
-  .flex.overflow-hidden > div:nth-child(2) {
-    min-height: 400px;
-    flex: 1;
+  .flex-1.flex.overflow-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
   
-  /* Right panel (notes/reports) - collapse by default */
-  .flex.overflow-hidden > div:last-child {
-    max-height: 40vh;
-    overflow-y: auto;
+  /* Panel Navigation Indicators */
+  #panel-indicators {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex !important;
+    gap: 8px;
+    padding: 12px 20px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    z-index: 1000;
+  }
+  
+  #panel-indicators .indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  
+  #panel-indicators .indicator-dot.active {
+    width: 24px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 1);
+  }
+  
+  /* Panel Navigation Buttons */
+  .panel-nav-button {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    opacity: 0.8;
+  }
+  
+  .panel-nav-button:active {
+    opacity: 1;
+    transform: translateY(-50%) scale(0.95);
+  }
+  
+  .panel-nav-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  
+  #prev-panel-btn {
+    left: 10px;
+  }
+  
+  #next-panel-btn {
+    right: 10px;
   }
   
   /* Header adjustments */
@@ -473,6 +541,44 @@ body {
   #chat-input {
     min-height: 60px;
     font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Make chat messages more readable with larger text */
+  #chat-messages {
+    font-size: 16px !important;
+    line-height: 1.6 !important;
+  }
+  
+  .chat-message {
+    padding: 1rem !important;
+    font-size: 16px !important;
+  }
+  
+  /* Panel labels for better orientation */
+  .flex-1.flex.overflow-hidden > div::before {
+    content: attr(data-panel-name);
+    display: block;
+    padding: 12px 16px;
+    background: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+    font-size: 14px;
+    color: #374151;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .flex-1.flex.overflow-hidden > div:first-child::before {
+    content: "📚 Sources";
+  }
+  
+  .flex-1.flex.overflow-hidden > div:nth-child(2)::before {
+    content: "💬 Chat";
+  }
+  
+  .flex-1.flex.overflow-hidden > div:last-child::before {
+    content: "📝 Notes & Reports";
   }
 }
 

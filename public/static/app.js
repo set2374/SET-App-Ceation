@@ -212,8 +212,161 @@ function hideOrientationSuggestion() {
   }
 }
 
+// Panel swipe navigation (mobile portrait mode)
+let currentPanel = 0; // 0 = Sources, 1 = Chat, 2 = Notes
+const totalPanels = 3;
+
+function setupPanelSwipeNavigation() {
+  // Only setup on mobile devices in portrait
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (!isMobile || window.innerWidth >= 768) {
+    return;
+  }
+  
+  const panelContainer = document.querySelector('.flex-1.flex.overflow-hidden');
+  if (!panelContainer) {
+    console.log('Panel container not found');
+    return;
+  }
+  
+  // Create panel indicators
+  createPanelIndicators();
+  
+  // Create navigation buttons
+  createNavigationButtons();
+  
+  // Track scroll position to update indicators
+  panelContainer.addEventListener('scroll', updatePanelIndicators, {passive: true});
+  
+  // Update initial state
+  updatePanelIndicators();
+  
+  console.log('Panel swipe navigation initialized');
+}
+
+function createPanelIndicators() {
+  // Check if already exists
+  if (document.getElementById('panel-indicators')) {
+    return;
+  }
+  
+  const indicatorsContainer = document.createElement('div');
+  indicatorsContainer.id = 'panel-indicators';
+  indicatorsContainer.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  
+  for (let i = 0; i < totalPanels; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'indicator-dot';
+    dot.dataset.panel = i;
+    dot.addEventListener('click', () => navigateToPanel(i));
+    indicatorsContainer.appendChild(dot);
+  }
+  
+  document.body.appendChild(indicatorsContainer);
+}
+
+function createNavigationButtons() {
+  // Check if already exists
+  if (document.getElementById('prev-panel-btn')) {
+    return;
+  }
+  
+  // Previous button
+  const prevBtn = document.createElement('button');
+  prevBtn.id = 'prev-panel-btn';
+  prevBtn.className = 'panel-nav-button';
+  prevBtn.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  prevBtn.innerHTML = `
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+    </svg>
+  `;
+  prevBtn.addEventListener('click', () => navigateToPanel(currentPanel - 1));
+  document.body.appendChild(prevBtn);
+  
+  // Next button
+  const nextBtn = document.createElement('button');
+  nextBtn.id = 'next-panel-btn';
+  nextBtn.className = 'panel-nav-button';
+  nextBtn.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  nextBtn.innerHTML = `
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+    </svg>
+  `;
+  nextBtn.addEventListener('click', () => navigateToPanel(currentPanel + 1));
+  document.body.appendChild(nextBtn);
+}
+
+function updatePanelIndicators() {
+  const panelContainer = document.querySelector('.flex-1.flex.overflow-hidden');
+  if (!panelContainer) return;
+  
+  // Calculate which panel is currently visible based on scroll position
+  const scrollLeft = panelContainer.scrollLeft;
+  const panelWidth = panelContainer.offsetWidth;
+  const newPanel = Math.round(scrollLeft / panelWidth);
+  
+  if (newPanel !== currentPanel) {
+    currentPanel = newPanel;
+    console.log(`Switched to panel ${currentPanel}`);
+  }
+  
+  // Update indicator dots
+  const dots = document.querySelectorAll('.indicator-dot');
+  dots.forEach((dot, index) => {
+    if (index === currentPanel) {
+      dot.classList.add('active');
+    } else {
+      dot.classList.remove('active');
+    }
+  });
+  
+  // Update navigation buttons state
+  const prevBtn = document.getElementById('prev-panel-btn');
+  const nextBtn = document.getElementById('next-panel-btn');
+  
+  if (prevBtn) {
+    prevBtn.disabled = currentPanel === 0;
+  }
+  
+  if (nextBtn) {
+    nextBtn.disabled = currentPanel === totalPanels - 1;
+  }
+}
+
+function navigateToPanel(panelIndex) {
+  if (panelIndex < 0 || panelIndex >= totalPanels) {
+    return;
+  }
+  
+  const panelContainer = document.querySelector('.flex-1.flex.overflow-hidden');
+  if (!panelContainer) return;
+  
+  const panelWidth = panelContainer.offsetWidth;
+  const targetScrollLeft = panelIndex * panelWidth;
+  
+  panelContainer.scrollTo({
+    left: targetScrollLeft,
+    behavior: 'smooth'
+  });
+  
+  currentPanel = panelIndex;
+  console.log(`Navigating to panel ${panelIndex}`);
+}
+
 // Setup all event listeners
 function setupEventListeners() {
+  // Setup panel swipe navigation for mobile portrait
+  setupPanelSwipeNavigation();
+  
+  // Re-setup on orientation change
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      setupPanelSwipeNavigation();
+      updatePanelIndicators();
+    }, 200);
+  });
   // Add source button
   const addSourceBtn = document.getElementById('add-source-btn');
   if (addSourceBtn) {
