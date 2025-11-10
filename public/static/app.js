@@ -217,16 +217,43 @@ let currentPanel = 0; // 0 = Sources, 1 = Chat, 2 = Notes
 const totalPanels = 3;
 
 function setupPanelSwipeNavigation() {
-  // Only setup on mobile devices in portrait
+  // Only setup on mobile devices
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  if (!isMobile || window.innerWidth >= 768) {
+  const isPortrait = window.innerWidth < window.innerHeight;
+  
+  console.log(`setupPanelSwipeNavigation: isMobile=${isMobile}, isPortrait=${isPortrait}, width=${window.innerWidth}`);
+  
+  if (!isMobile) {
+    console.log('Not a mobile device, skipping swipe navigation');
     return;
   }
   
   const panelContainer = document.querySelector('.flex-1.flex.overflow-hidden');
   if (!panelContainer) {
-    console.log('Panel container not found');
+    console.error('Panel container not found!');
     return;
+  }
+  
+  console.log('Panel container found:', panelContainer);
+  console.log('Panel container children:', panelContainer.children.length);
+  
+  // Force the container styles for portrait mode
+  if (isPortrait && window.innerWidth < 768) {
+    console.log('Forcing portrait swipe styles');
+    panelContainer.style.flexDirection = 'row';
+    panelContainer.style.overflowX = 'scroll';
+    panelContainer.style.scrollSnapType = 'x mandatory';
+    panelContainer.style.webkitOverflowScrolling = 'touch';
+    
+    // Force each child panel to full width
+    Array.from(panelContainer.children).forEach((child, index) => {
+      child.style.width = '100vw';
+      child.style.minWidth = '100vw';
+      child.style.maxWidth = '100vw';
+      child.style.flexShrink = '0';
+      child.style.scrollSnapAlign = 'start';
+      console.log(`Panel ${index} styled:`, child);
+    });
   }
   
   // Create panel indicators
@@ -238,64 +265,118 @@ function setupPanelSwipeNavigation() {
   // Track scroll position to update indicators
   panelContainer.addEventListener('scroll', updatePanelIndicators, {passive: true});
   
+  // Add touch event logging for debugging
+  panelContainer.addEventListener('touchstart', (e) => {
+    console.log('Touch start detected');
+  }, {passive: true});
+  
+  panelContainer.addEventListener('touchmove', (e) => {
+    console.log('Touch move detected');
+  }, {passive: true});
+  
   // Update initial state
   updatePanelIndicators();
   
-  console.log('Panel swipe navigation initialized');
+  console.log('✅ Panel swipe navigation initialized successfully');
+  console.log('Panel container scroll width:', panelContainer.scrollWidth);
+  console.log('Panel container client width:', panelContainer.clientWidth);
 }
 
 function createPanelIndicators() {
   // Check if already exists
   if (document.getElementById('panel-indicators')) {
+    console.log('Panel indicators already exist');
     return;
   }
   
   const indicatorsContainer = document.createElement('div');
   indicatorsContainer.id = 'panel-indicators';
-  indicatorsContainer.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  
+  // Force visible on mobile portrait
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isPortrait = window.innerWidth < window.innerHeight;
+  
+  if (isMobile && isPortrait && window.innerWidth < 768) {
+    indicatorsContainer.style.display = 'flex';
+    console.log('Panel indicators forced visible');
+  } else {
+    indicatorsContainer.style.display = 'none';
+  }
   
   for (let i = 0; i < totalPanels; i++) {
     const dot = document.createElement('div');
     dot.className = 'indicator-dot';
     dot.dataset.panel = i;
-    dot.addEventListener('click', () => navigateToPanel(i));
+    dot.addEventListener('click', () => {
+      console.log(`Indicator dot ${i} clicked`);
+      navigateToPanel(i);
+    });
     indicatorsContainer.appendChild(dot);
   }
   
   document.body.appendChild(indicatorsContainer);
+  console.log('✅ Panel indicators created:', totalPanels, 'dots');
 }
 
 function createNavigationButtons() {
   // Check if already exists
   if (document.getElementById('prev-panel-btn')) {
+    console.log('Navigation buttons already exist');
     return;
   }
+  
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isPortrait = window.innerWidth < window.innerHeight;
   
   // Previous button
   const prevBtn = document.createElement('button');
   prevBtn.id = 'prev-panel-btn';
   prevBtn.className = 'panel-nav-button';
-  prevBtn.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  
+  // Force visible on mobile portrait
+  if (isMobile && isPortrait && window.innerWidth < 768) {
+    prevBtn.style.display = 'flex';
+    console.log('Previous button forced visible');
+  } else {
+    prevBtn.style.display = 'none';
+  }
+  
   prevBtn.innerHTML = `
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
     </svg>
   `;
-  prevBtn.addEventListener('click', () => navigateToPanel(currentPanel - 1));
+  prevBtn.addEventListener('click', () => {
+    console.log('Previous button clicked');
+    navigateToPanel(currentPanel - 1);
+  });
   document.body.appendChild(prevBtn);
   
   // Next button
   const nextBtn = document.createElement('button');
   nextBtn.id = 'next-panel-btn';
   nextBtn.className = 'panel-nav-button';
-  nextBtn.style.display = 'none'; // Hidden by default, shown by CSS in portrait
+  
+  // Force visible on mobile portrait
+  if (isMobile && isPortrait && window.innerWidth < 768) {
+    nextBtn.style.display = 'flex';
+    console.log('Next button forced visible');
+  } else {
+    nextBtn.style.display = 'none';
+  }
+  
   nextBtn.innerHTML = `
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
     </svg>
   `;
-  nextBtn.addEventListener('click', () => navigateToPanel(currentPanel + 1));
+  nextBtn.addEventListener('click', () => {
+    console.log('Next button clicked');
+    navigateToPanel(currentPanel + 1);
+  });
   document.body.appendChild(nextBtn);
+  
+  console.log('✅ Navigation buttons created');
 }
 
 function updatePanelIndicators() {
@@ -336,15 +417,23 @@ function updatePanelIndicators() {
 }
 
 function navigateToPanel(panelIndex) {
+  console.log(`navigateToPanel called: ${panelIndex} (current: ${currentPanel})`);
+  
   if (panelIndex < 0 || panelIndex >= totalPanels) {
+    console.log(`Panel index ${panelIndex} out of range [0-${totalPanels-1}]`);
     return;
   }
   
   const panelContainer = document.querySelector('.flex-1.flex.overflow-hidden');
-  if (!panelContainer) return;
+  if (!panelContainer) {
+    console.error('Panel container not found in navigateToPanel');
+    return;
+  }
   
   const panelWidth = panelContainer.offsetWidth;
   const targetScrollLeft = panelIndex * panelWidth;
+  
+  console.log(`Scrolling to panel ${panelIndex}: scrollLeft=${targetScrollLeft}, panelWidth=${panelWidth}`);
   
   panelContainer.scrollTo({
     left: targetScrollLeft,
@@ -352,7 +441,13 @@ function navigateToPanel(panelIndex) {
   });
   
   currentPanel = panelIndex;
-  console.log(`Navigating to panel ${panelIndex}`);
+  
+  // Force update indicators immediately
+  setTimeout(() => {
+    updatePanelIndicators();
+  }, 100);
+  
+  console.log(`✅ Navigated to panel ${panelIndex}`);
 }
 
 // Setup all event listeners
