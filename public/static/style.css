@@ -681,29 +681,29 @@ body {
   }
   
   /* Three panels - adjust widths for landscape */
-  /* Left panel (sources) - narrower in landscape */
+  /* Left panel (sources) - MUCH NARROWER to give chat more space */
   .flex-1.flex.overflow-hidden > div:first-child {
-    width: 20% !important;
-    min-width: 200px !important;
-    max-width: 250px !important;
+    width: 15% !important;
+    min-width: 140px !important;
+    max-width: 180px !important;
     flex: none !important;
     height: 100% !important;
   }
   
-  /* Center panel (chat) - take most space */
+  /* Center panel (chat) - MUCH WIDER - THIS IS THE PRIMARY WORKSPACE */
   .flex-1.flex.overflow-hidden > div:nth-child(2) {
     flex: 1 !important;
     width: auto !important;
     height: 100% !important;
-    min-width: 0 !important;
+    min-width: 500px !important;  /* Force minimum width for chat */
     max-width: none !important;
   }
   
-  /* Right panel (notes/reports) - narrower in landscape */
+  /* Right panel (notes/reports) - MUCH NARROWER to give chat more space */
   .flex-1.flex.overflow-hidden > div:last-child {
-    width: 25% !important;
-    min-width: 220px !important;
-    max-width: 280px !important;
+    width: 20% !important;
+    min-width: 140px !important;
+    max-width: 180px !important;
     flex: none !important;
     height: 100% !important;
   }
@@ -717,11 +717,27 @@ body {
     font-size: 12px !important;
   }
   
-  /* Chat messages - MUCH LARGER for readability */
+  /* Chat messages - MUCH LARGER for readability AND MUCH TALLER */
   #chat-messages {
     font-size: 18px !important;
     line-height: 1.8 !important;
     padding: 1rem !important;
+    min-height: 400px !important;  /* Force minimum height */
+    flex: 1 !important;  /* Take all available vertical space */
+    overflow-y: auto !important;  /* Scroll when needed */
+  }
+  
+  /* Chat container - ensure it fills vertical space */
+  .flex-1.flex.overflow-hidden > div:nth-child(2) {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Chat panel inner structure - maximize vertical space */
+  .flex-1.flex.overflow-hidden > div:nth-child(2) > div {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
   }
   
   .chat-message,
