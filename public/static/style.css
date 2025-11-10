@@ -717,27 +717,12 @@ body {
     font-size: 12px !important;
   }
   
-  /* Chat messages - MUCH LARGER for readability AND MUCH TALLER */
+  /* Chat messages - MUCH LARGER for readability */
   #chat-messages {
     font-size: 18px !important;
     line-height: 1.8 !important;
     padding: 1rem !important;
-    min-height: 400px !important;  /* Force minimum height */
-    flex: 1 !important;  /* Take all available vertical space */
-    overflow-y: auto !important;  /* Scroll when needed */
-  }
-  
-  /* Chat container - ensure it fills vertical space */
-  .flex-1.flex.overflow-hidden > div:nth-child(2) {
-    display: flex !important;
-    flex-direction: column !important;
-  }
-  
-  /* Chat panel inner structure - maximize vertical space */
-  .flex-1.flex.overflow-hidden > div:nth-child(2) > div {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
+    /* Don't force height - let it grow naturally */
   }
   
   .chat-message,
