@@ -10,6 +10,9 @@ let chatHistory = [];
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('TLS eDiscovery Platform (NotebookLM style) initializing...');
   
+  // Setup mobile/orientation optimizations
+  setupMobileOptimizations();
+  
   // Load initial data
   await loadMatters();
   await loadNotes();
@@ -20,6 +23,161 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   console.log('Application ready');
 });
+
+// Mobile and orientation optimizations
+function setupMobileOptimizations() {
+  // Detect if running on mobile device
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isTablet = /iPad|Android/i.test(navigator.userAgent) && window.innerWidth >= 768;
+  
+  if (isMobile || isTablet) {
+    console.log('Mobile/tablet device detected');
+    
+    // Request landscape orientation on mobile (if supported)
+    if (screen.orientation && screen.orientation.lock) {
+      // Try to lock to landscape on mobile phones (not tablets)
+      if (isMobile && !isTablet && window.innerWidth < 768) {
+        screen.orientation.lock('landscape').catch(err => {
+          console.log('Orientation lock not supported or denied:', err);
+        });
+      }
+    }
+    
+    // Add mobile-specific class to body
+    document.body.classList.add('mobile-device');
+    if (isTablet) {
+      document.body.classList.add('tablet-device');
+    }
+    
+    // Show orientation suggestion on small mobile devices
+    if (isMobile && !isTablet && window.innerWidth < 768) {
+      showOrientationSuggestion();
+    }
+    
+    // Listen for orientation changes
+    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('resize', handleResize);
+  }
+  
+  // Prevent zoom on input focus (iOS)
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta) {
+      // Store original content
+      const originalContent = viewportMeta.content;
+      
+      // Prevent zoom on focus
+      document.addEventListener('focusin', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+          viewportMeta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        }
+      });
+      
+      // Restore original on blur
+      document.addEventListener('focusout', () => {
+        viewportMeta.content = originalContent;
+      });
+    }
+  }
+  
+  // Add touch event handlers for better mobile UX
+  document.addEventListener('touchstart', function() {}, {passive: true});
+}
+
+// Handle orientation changes
+function handleOrientationChange() {
+  const orientation = window.orientation || (window.innerWidth > window.innerHeight ? 90 : 0);
+  
+  if (Math.abs(orientation) === 90) {
+    // Landscape mode
+    console.log('Switched to landscape mode');
+    document.body.classList.add('landscape-mode');
+    document.body.classList.remove('portrait-mode');
+    hideOrientationSuggestion();
+  } else {
+    // Portrait mode
+    console.log('Switched to portrait mode');
+    document.body.classList.add('portrait-mode');
+    document.body.classList.remove('landscape-mode');
+    
+    // Show suggestion again if on small mobile
+    if (window.innerWidth < 768) {
+      setTimeout(showOrientationSuggestion, 1000);
+    }
+  }
+}
+
+// Handle window resize
+function handleResize() {
+  // Adjust layout based on new dimensions
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  
+  console.log(`Window resized: ${width}x${height}`);
+  
+  // Update orientation-based classes
+  if (width > height) {
+    document.body.classList.add('landscape-mode');
+    document.body.classList.remove('portrait-mode');
+  } else {
+    document.body.classList.add('portrait-mode');
+    document.body.classList.remove('landscape-mode');
+  }
+}
+
+// Show orientation suggestion banner (dismissable)
+function showOrientationSuggestion() {
+  // Don't show if already dismissed in this session
+  if (sessionStorage.getItem('orientation-suggestion-dismissed')) {
+    return;
+  }
+  
+  // Only show in portrait on small screens
+  if (window.innerWidth >= window.innerHeight || window.innerWidth >= 768) {
+    return;
+  }
+  
+  // Check if banner already exists
+  if (document.getElementById('orientation-banner')) {
+    return;
+  }
+  
+  const banner = document.createElement('div');
+  banner.id = 'orientation-banner';
+  banner.className = 'fixed bottom-0 left-0 right-0 bg-blue-600 text-white p-3 shadow-lg z-50 flex items-center justify-between';
+  banner.innerHTML = `
+    <div class="flex items-center space-x-3">
+      <svg class="w-6 h-6 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+      </svg>
+      <div>
+        <p class="text-sm font-semibold">Rotate your device for better experience</p>
+        <p class="text-xs opacity-90">This app works best in landscape mode</p>
+      </div>
+    </div>
+    <button onclick="hideOrientationSuggestion()" class="text-white hover:text-gray-200 p-2">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  `;
+  
+  document.body.appendChild(banner);
+  
+  // Auto-hide after 8 seconds
+  setTimeout(() => {
+    hideOrientationSuggestion();
+  }, 8000);
+}
+
+// Hide orientation suggestion banner
+function hideOrientationSuggestion() {
+  const banner = document.getElementById('orientation-banner');
+  if (banner) {
+    banner.remove();
+    sessionStorage.setItem('orientation-suggestion-dismissed', 'true');
+  }
+}
 
 // Setup all event listeners
 function setupEventListeners() {

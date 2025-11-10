@@ -357,13 +357,326 @@ body {
   white-space: nowrap;
 }
 
-/* Responsive adjustments */
-@media (max-width: 1024px) {
+/* ===============================================
+   MOBILE & TABLET RESPONSIVE STYLES
+   =============================================== */
+
+/* Lock orientation preference (CSS hint for supporting browsers) */
+@media screen and (max-width: 1024px) {
+  html {
+    /* Suggest landscape on mobile for better UX */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* Mobile Portrait (Phone vertical) - Stack panels vertically */
+@media (max-width: 768px) and (orientation: portrait) {
+  /* Force body to allow horizontal scroll if needed */
+  body {
+    overflow-x: auto;
+    min-width: 100vw;
+  }
+  
+  /* Stack three panels vertically */
+  .flex.overflow-hidden > div {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 300px;
+  }
+  
+  /* Left panel (sources) - collapse by default */
+  .flex.overflow-hidden > div:first-child {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  
+  /* Center panel (chat) - main focus */
+  .flex.overflow-hidden > div:nth-child(2) {
+    min-height: 400px;
+    flex: 1;
+  }
+  
+  /* Right panel (notes/reports) - collapse by default */
+  .flex.overflow-hidden > div:last-child {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  
+  /* Header adjustments */
+  header .flex {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+  
+  header .flex > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  /* Hide logo on small mobile portrait */
+  header img {
+    height: 2rem;
+  }
+  
+  /* Smaller text in header */
+  header h1 {
+    font-size: 1rem;
+  }
+  
+  header p {
+    font-size: 0.625rem;
+  }
+  
+  /* Document cards - full width */
+  .source-item {
+    padding: 0.75rem !important;
+  }
+  
+  /* Chat messages - better spacing */
+  #chat-messages {
+    padding: 1rem;
+  }
+  
+  /* Input areas - larger touch targets */
+  input, textarea, button, select {
+    min-height: 44px; /* iOS recommended touch target */
+  }
+  
+  /* Chat input area */
+  #chat-input {
+    min-height: 60px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* Mobile Landscape (Phone horizontal) - Side-by-side panels */
+@media (max-width: 1024px) and (orientation: landscape) {
+  /* Optimize for landscape viewing */
+  body {
+    overflow: hidden;
+  }
+  
+  /* Header - more compact */
+  header {
+    padding: 0.5rem 1rem !important;
+  }
+  
+  header h1 {
+    font-size: 1.125rem;
+  }
+  
+  header img {
+    height: 2.5rem;
+  }
+  
+  /* Three panels - adjust widths for landscape */
+  .flex.overflow-hidden {
+    flex-direction: row !important;
+  }
+  
+  /* Left panel (sources) - narrower in landscape */
+  .flex.overflow-hidden > div:first-child {
+    width: 20% !important;
+    min-width: 250px !important;
+    max-width: 300px !important;
+  }
+  
+  /* Center panel (chat) - take most space */
+  .flex.overflow-hidden > div:nth-child(2) {
+    flex: 1 !important;
+    width: auto !important;
+  }
+  
+  /* Right panel (notes/reports) - narrower in landscape */
+  .flex.overflow-hidden > div:last-child {
+    width: 25% !important;
+    min-width: 280px !important;
+    max-width: 350px !important;
+  }
+  
+  /* Smaller fonts for landscape mobile */
+  .document-card .filename {
+    font-size: 0.75rem;
+  }
+  
+  .document-card .bates {
+    font-size: 0.625rem;
+  }
+  
+  /* Chat messages - compact */
+  .chat-message {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+  }
+  
+  /* Suggested questions - smaller */
+  .suggested-question {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+/* Tablet Portrait (iPad vertical) - Similar to mobile landscape */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  /* Left panel - medium width */
+  .flex.overflow-hidden > div:first-child {
+    width: 30% !important;
+    min-width: 280px !important;
+    max-width: 350px !important;
+  }
+  
+  /* Center panel - flexible */
+  .flex.overflow-hidden > div:nth-child(2) {
+    flex: 1 !important;
+  }
+  
+  /* Right panel - medium width */
+  .flex.overflow-hidden > div:last-child {
+    width: 30% !important;
+    min-width: 280px !important;
+    max-width: 350px !important;
+  }
+}
+
+/* Tablet Landscape (iPad horizontal) - Near desktop experience */
+@media (min-width: 768px) and (max-width: 1280px) and (orientation: landscape) {
+  /* Left panel */
+  .flex.overflow-hidden > div:first-child {
+    width: 22% !important;
+    min-width: 280px !important;
+    max-width: 320px !important;
+  }
+  
+  /* Center panel */
+  .flex.overflow-hidden > div:nth-child(2) {
+    flex: 1 !important;
+  }
+  
+  /* Right panel */
+  .flex.overflow-hidden > div:last-child {
+    width: 28% !important;
+    min-width: 320px !important;
+    max-width: 380px !important;
+  }
+}
+
+/* Large Tablets and Small Laptops */
+@media (min-width: 1024px) and (max-width: 1280px) {
   .w-80 {
     width: 16rem;
   }
   
   .w-96 {
     width: 20rem;
+  }
+}
+
+/* Touch device optimizations (any device with touch) */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets */
+  button, a, input[type="checkbox"], .source-checkbox {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  .document-card:hover {
+    border-color: #e5e7eb;
+    box-shadow: none;
+  }
+  
+  /* Show active/focus states instead */
+  .document-card:active,
+  button:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+  
+  /* Prevent text selection issues on touch */
+  .document-card,
+  .source-item,
+  button {
+    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.1);
+    -webkit-touch-callout: none;
+  }
+  
+  /* Better scrolling on iOS */
+  .overflow-y-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* High DPI displays (Retina, etc.) */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Sharper fonts on high DPI */
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Thinner borders on Retina */
+  .border {
+    border-width: 0.5px;
+  }
+}
+
+/* Safe area insets for devices with notches (iPhone X+) */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  header {
+    padding-top: calc(0.75rem + env(safe-area-inset-top));
+  }
+}
+
+/* Dark mode support (optional, for system preference) */
+@media (prefers-color-scheme: dark) {
+  /* Dark mode styles can be added here if desired */
+  /* Currently using light mode only for legal document review */
+}
+
+/* Reduced motion support (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  /* Hide UI elements when printing */
+  header,
+  .source-item input[type="checkbox"],
+  button,
+  .filter-tag {
+    display: none !important;
+  }
+  
+  /* Expand content for print */
+  .flex.overflow-hidden > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+  
+  /* Better print colors */
+  body {
+    background: white !important;
+    color: black !important;
   }
 }
