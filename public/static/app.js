@@ -33,6 +33,9 @@ function setupMobileOptimizations() {
   if (isMobile || isTablet) {
     console.log('Mobile/tablet device detected');
     
+    // Set initial orientation state
+    handleOrientationChange();
+    
     // Request landscape orientation on mobile (if supported)
     if (screen.orientation && screen.orientation.lock) {
       // Try to lock to landscape on mobile phones (not tablets)
@@ -54,9 +57,20 @@ function setupMobileOptimizations() {
       showOrientationSuggestion();
     }
     
-    // Listen for orientation changes
-    window.addEventListener('orientationchange', handleOrientationChange);
-    window.addEventListener('resize', handleResize);
+    // Listen for orientation changes (multiple events for compatibility)
+    window.addEventListener('orientationchange', () => {
+      setTimeout(handleOrientationChange, 100); // Delay to let browser update
+    });
+    window.addEventListener('resize', () => {
+      setTimeout(handleOrientationChange, 100);
+    });
+    
+    // Also listen to screen.orientation if available
+    if (screen.orientation) {
+      screen.orientation.addEventListener('change', () => {
+        setTimeout(handleOrientationChange, 100);
+      });
+    }
   }
   
   // Prevent zoom on input focus (iOS)
@@ -86,25 +100,44 @@ function setupMobileOptimizations() {
 
 // Handle orientation changes
 function handleOrientationChange() {
-  const orientation = window.orientation || (window.innerWidth > window.innerHeight ? 90 : 0);
+  // Use both window.orientation (deprecated but works on iOS) and screen.orientation
+  let isLandscape = false;
   
-  if (Math.abs(orientation) === 90) {
+  if (window.screen && window.screen.orientation) {
+    // Modern API
+    isLandscape = window.screen.orientation.type.includes('landscape');
+  } else if (typeof window.orientation !== 'undefined') {
+    // Legacy API (iOS)
+    isLandscape = Math.abs(window.orientation) === 90;
+  } else {
+    // Fallback
+    isLandscape = window.innerWidth > window.innerHeight;
+  }
+  
+  console.log(`Orientation: ${isLandscape ? 'Landscape' : 'Portrait'}, Width: ${window.innerWidth}, Height: ${window.innerHeight}`);
+  
+  if (isLandscape) {
     // Landscape mode
-    console.log('Switched to landscape mode');
     document.body.classList.add('landscape-mode');
     document.body.classList.remove('portrait-mode');
+    document.body.setAttribute('data-orientation', 'landscape');
     hideOrientationSuggestion();
   } else {
     // Portrait mode
-    console.log('Switched to portrait mode');
     document.body.classList.add('portrait-mode');
     document.body.classList.remove('landscape-mode');
+    document.body.setAttribute('data-orientation', 'portrait');
     
     // Show suggestion again if on small mobile
     if (window.innerWidth < 768) {
       setTimeout(showOrientationSuggestion, 1000);
     }
   }
+  
+  // Force layout recalculation
+  document.body.style.display = 'none';
+  void document.body.offsetHeight; // Trigger reflow
+  document.body.style.display = '';
 }
 
 // Handle window resize

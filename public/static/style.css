@@ -369,6 +369,21 @@ body {
     -ms-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
+  
+  /* Force main container to be flexible */
+  .h-screen.flex.flex-col {
+    height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height for mobile */
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Force main content area to fill remaining space */
+  .flex-1.flex.overflow-hidden {
+    flex: 1 !important;
+    overflow: hidden !important;
+    display: flex !important;
+  }
 }
 
 /* Mobile Portrait (Phone vertical) - Stack panels vertically */
@@ -379,13 +394,20 @@ body {
     min-width: 100vw;
   }
   
+  /* Override Tailwind flex classes to force column layout */
+  .flex-1.flex.overflow-hidden {
+    flex-direction: column !important;
+    display: flex !important;
+  }
+  
   /* Stack three panels vertically */
-  .flex.overflow-hidden > div {
+  .flex-1.flex.overflow-hidden > div {
     width: 100% !important;
     min-width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    min-height: 300px;
+    min-height: 300px !important;
+    flex: none !important;
   }
   
   /* Left panel (sources) - collapse by default */
@@ -474,29 +496,38 @@ body {
     height: 2.5rem;
   }
   
-  /* Three panels - adjust widths for landscape */
-  .flex.overflow-hidden {
+  /* Override Tailwind flex classes to force row layout */
+  .flex-1.flex.overflow-hidden {
     flex-direction: row !important;
+    display: flex !important;
   }
   
+  /* Three panels - adjust widths for landscape */
   /* Left panel (sources) - narrower in landscape */
-  .flex.overflow-hidden > div:first-child {
+  .flex-1.flex.overflow-hidden > div:first-child {
     width: 20% !important;
-    min-width: 250px !important;
-    max-width: 300px !important;
+    min-width: 200px !important;
+    max-width: 250px !important;
+    flex: none !important;
+    height: 100% !important;
   }
   
   /* Center panel (chat) - take most space */
-  .flex.overflow-hidden > div:nth-child(2) {
+  .flex-1.flex.overflow-hidden > div:nth-child(2) {
     flex: 1 !important;
     width: auto !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
   
   /* Right panel (notes/reports) - narrower in landscape */
-  .flex.overflow-hidden > div:last-child {
+  .flex-1.flex.overflow-hidden > div:last-child {
     width: 25% !important;
-    min-width: 280px !important;
-    max-width: 350px !important;
+    min-width: 220px !important;
+    max-width: 280px !important;
+    flex: none !important;
+    height: 100% !important;
   }
   
   /* Smaller fonts for landscape mobile */
@@ -637,6 +668,46 @@ body {
   
   header {
     padding-top: calc(0.75rem + env(safe-area-inset-top));
+  }
+}
+
+/* Orientation-based layouts using data attributes (works better on iOS) */
+body[data-orientation="landscape"] .flex-1.flex.overflow-hidden {
+  flex-direction: row !important;
+}
+
+body[data-orientation="portrait"] .flex-1.flex.overflow-hidden {
+  flex-direction: column !important;
+}
+
+/* Force specific layouts on small screens */
+@media (max-width: 768px) {
+  body[data-orientation="portrait"] .flex-1.flex.overflow-hidden > div {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 300px !important;
+    flex: none !important;
+  }
+  
+  body[data-orientation="landscape"] .flex-1.flex.overflow-hidden > div:first-child {
+    width: 25% !important;
+    min-width: 200px !important;
+    flex: none !important;
+    height: 100% !important;
+  }
+  
+  body[data-orientation="landscape"] .flex-1.flex.overflow-hidden > div:nth-child(2) {
+    flex: 1 !important;
+    height: 100% !important;
+  }
+  
+  body[data-orientation="landscape"] .flex-1.flex.overflow-hidden > div:last-child {
+    width: 30% !important;
+    min-width: 220px !important;
+    flex: none !important;
+    height: 100% !important;
   }
 }
 
