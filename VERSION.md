@@ -1,10 +1,42 @@
 # TLS eDiscovery Platform - Version History
 
-## Current Version: 2.0.4 (2025-11-10)
+## Current Version: 2.0.6 (2025-11-10)
 
 **Code Name**: "SearchMaster"  
 **Status**: Ready for Deployment  
 **Branch**: main
+
+### Version 2.0.6 - Landscape Chat Text Readability
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### Bug Fixes
+- Fixed landscape mode chat text size (increased to 18px from 14px)
+- Chat input enlarged to 18px with 60px min-height
+- All message elements (user and AI) now 18px
+- Line height increased to 1.8 for comfortable reading
+- Send button increased to 16px
+- Suggested questions 15px with 44px touch targets
+
+#### User Feedback
+- User confirmed: "The swipe now works in portrait"
+- User reported: "In landscape the chat window is still way too small"
+- v2.0.6 fixes landscape readability to match portrait mode
+
+---
+
+### Version 2.0.5 - Aggressive Portrait Fixes
+**Release Date**: 2025-11-10  
+**Breaking Changes**: None (backward compatible)
+
+#### Bug Fixes
+- Aggressive CSS specificity to force portrait swipe navigation
+- JavaScript inline style forcing for panels
+- Chat text increased to 18px in portrait mode
+- Extensive console logging for debugging
+- Touch event detection improved
+
+---
 
 ### Version 2.0.4 - Mobile Portrait Swipe Navigation
 **Release Date**: 2025-11-10  

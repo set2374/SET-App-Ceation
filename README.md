@@ -24,7 +24,9 @@ The TLS eDiscovery Platform is an AI-powered document review application designe
 
 ## URLs
 
-- **Production v2.0.4**: https://59f701f2.tls-ediscovery.pages.dev (LIVE - Latest with Mobile Portrait Swipe)
+- **Production v2.0.6**: https://15c6e143.tls-ediscovery.pages.dev (LIVE - Latest, Landscape Chat Text Fixed)
+- **Previous v2.0.5**: https://3448cfb6.tls-ediscovery.pages.dev (Portrait Swipe Works)
+- **Previous v2.0.4**: https://59f701f2.tls-ediscovery.pages.dev (Initial Swipe Attempt)
 - **Previous v2.0.3**: https://d72bb3e5.tls-ediscovery.pages.dev (iOS Orientation Fixes)
 - **Previous v2.0.2**: https://de29053b.tls-ediscovery.pages.dev (Mobile Responsive)
 - **Previous v2.0.1**: https://16accbb3.tls-ediscovery.pages.dev (Delete Feature)
@@ -504,9 +506,10 @@ For internal use only.
 ---
 
 **Last Updated**: November 10, 2025  
-**Version**: 2.0.4 (Production)  
+**Version**: 2.0.6 (Production)  
 **Status**: ✅ DEPLOYED TO PRODUCTION  
-**Latest Feature**: Mobile Portrait Swipe Navigation with Panel Indicators  
+**Latest Fix**: Landscape Chat Text Enlarged to 18px (User Confirmed Working)  
+**Previous Fix**: Portrait Swipe Navigation (User Confirmed Working)  
 **Testing Device**: iPhone 15 Pro Max  
 **Repository**: https://github.com/set2374/SET-App-Ceation  
-**Git Tag**: v2.0.4
+**Git Tag**: v2.0.6
