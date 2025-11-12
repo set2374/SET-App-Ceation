@@ -773,10 +773,10 @@ async function sendChatMessage() {
   addChatMessage('user', message);
   
   // Show loading state
-  const loadingId = addChatMessage('assistant', 'Analyzing documents with Claude Sonnet 4.5...', true);
+  const loadingId = addChatMessage('assistant', 'Analyzing documents with Gemini Flash 2.5...', true);
   
   try {
-    // Call Claude API
+    // Call Gemini API with File Search
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {

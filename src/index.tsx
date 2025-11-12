@@ -136,7 +136,7 @@ app.get('/', (c) => {
               </svg>
               <h2 class="text-base font-semibold text-gray-900">VitaQuest Matter</h2>
             </div>
-            <p class="text-xs text-gray-500">Chat with your documents using AI • Powered by Claude Sonnet 3.5</p>
+            <p class="text-xs text-gray-500">Chat with your documents using AI • Powered by Gemini Flash 2.5</p>
           </div>
 
           {/* Chat Messages */}
@@ -1112,7 +1112,7 @@ app.post('/api/reports/hot-documents', async (c) => {
   }
 })
 
-// Chat with Claude Sonnet 3.5
+// Chat with Gemini Flash 2.5
 app.post('/api/chat', async (c) => {
   const { DB, GEMINI_API_KEY } = c.env
   
