@@ -12,26 +12,30 @@ export async function uploadToGeminiFileSearch(
   documentId: number,
   matterId: number,
   batesNumber: string,
-  apiKey: string
+  apiKey: string,
+  existingStoreName?: string  // Pass existing store name from database
 ): Promise<{ documentName: string; storeName: string }> {
   const ai = new GoogleGenAI({ apiKey })
   
-  // Get or create File Search Store for this matter
-  const storeName = `matter-${matterId}-tls-ediscovery`
   let fileSearchStore
   
-  try {
-    // Try to get existing store
-    fileSearchStore = await ai.fileSearchStores.get({ 
-      name: `fileSearchStores/${storeName}` 
-    })
-    console.log(`[GEMINI] Using existing File Search Store: ${storeName}`)
-  } catch (error) {
+  if (existingStoreName) {
+    // Use existing store from database
+    try {
+      fileSearchStore = await ai.fileSearchStores.get({ name: existingStoreName })
+      console.log(`[GEMINI] Using existing File Search Store from DB: ${existingStoreName}`)
+    } catch (error) {
+      console.error(`[GEMINI] Failed to get existing store ${existingStoreName}:`, error)
+      throw new Error(`File Search Store ${existingStoreName} not found. Please check the database.`)
+    }
+  } else {
     // Create new store for this matter
-    console.log(`[GEMINI] Creating new File Search Store: ${storeName}`)
+    const displayName = `matter-${matterId}-tls-ediscovery`
+    console.log(`[GEMINI] Creating new File Search Store: ${displayName}`)
     fileSearchStore = await ai.fileSearchStores.create({
-      config: { displayName: storeName }
+      config: { displayName }
     })
+    console.log(`[GEMINI] Created new File Search Store: ${fileSearchStore.name}`)
   }
   
   // Convert ArrayBuffer to Buffer for upload

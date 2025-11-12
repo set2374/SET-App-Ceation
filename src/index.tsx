@@ -827,13 +827,15 @@ app.post('/api/upload', async (c) => {
     const { uploadToGeminiFileSearch } = await import('./gemini')
     
     // Start async indexing (don't wait for completion)
+    // Pass existing store name from matter if it exists
     uploadToGeminiFileSearch(
       fileBuffer,
       file.name,
       documentId,
       parseInt(matterId),
       batesStart,
-      GEMINI_API_KEY
+      GEMINI_API_KEY,
+      matter.gemini_store_name || undefined
     ).then(async ({ documentName, storeName }) => {
       // Update document with Gemini references
       await DB.prepare(`
