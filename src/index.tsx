@@ -1127,6 +1127,16 @@ app.post('/api/chat', async (c) => {
       return c.json({ error: 'Gemini API key not configured' }, 500)
     }
     
+    // Get the matter's File Search Store name from database
+    const matter = await DB.prepare('SELECT gemini_store_name FROM matters WHERE id = ?')
+      .bind(matter_id || 1).first() as any
+    
+    if (!matter?.gemini_store_name) {
+      return c.json({ 
+        error: 'No documents indexed yet. Please upload documents first to create the File Search Store.' 
+      }, 400)
+    }
+    
     // Import Gemini query function
     const { queryGeminiFileSearch } = await import('./gemini')
     
@@ -1143,12 +1153,13 @@ You are a legal AI assistant specializing in document review for litigation. Whe
 
 CRITICAL: When citing documents, reference them by their Bates numbers (the display name shown).`
 
-    // Query Gemini with File Search
+    // Query Gemini with File Search using the actual store name from database
     const { response: aiResponse, citations, tokensUsed } = await queryGeminiFileSearch(
       legalPrompt,
-      matter_id || 1,
+      matter.gemini_store_name,
       GEMINI_API_KEY,
-      selected_sources
+      selected_sources,
+      matter_id || 1
     )
     
     // Extract Bates numbers from citations
@@ -1177,6 +1188,115 @@ CRITICAL: When citing documents, reference them by their Bates numbers (the disp
     })
   } catch (error: any) {
     console.error('Chat error:', error)
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// Batch migration endpoint: Index existing documents to Gemini File Search
+app.post('/api/migrate-to-gemini', async (c) => {
+  const { DB, DOCUMENTS, GEMINI_API_KEY } = c.env
+  
+  if (!GEMINI_API_KEY) {
+    return c.json({ error: 'Gemini API key not configured' }, 500)
+  }
+  
+  try {
+    console.log('[MIGRATION] Starting batch migration to Gemini File Search...')
+    
+    // Get all documents that haven't been indexed yet
+    const documents = await DB.prepare(`
+      SELECT id, matter_id, filename, bates_start, storage_path, gemini_document_name
+      FROM documents
+      WHERE gemini_document_name IS NULL
+      ORDER BY id ASC
+    `).all()
+    
+    const totalDocs = documents.results?.length || 0
+    console.log(`[MIGRATION] Found ${totalDocs} documents to migrate`)
+    
+    if (totalDocs === 0) {
+      return c.json({ 
+        success: true, 
+        message: 'No documents to migrate - all already indexed',
+        migrated: 0
+      })
+    }
+    
+    const { uploadToGeminiFileSearch } = await import('./gemini')
+    
+    let migrated = 0
+    let failed = 0
+    const errors: string[] = []
+    
+    for (const doc of documents.results as any[]) {
+      try {
+        console.log(`[MIGRATION] Processing ${doc.id}: ${doc.filename} (Bates: ${doc.bates_start})`)
+        
+        // Download document from R2
+        const r2Object = await DOCUMENTS.get(doc.storage_path)
+        if (!r2Object) {
+          throw new Error(`Document not found in R2: ${doc.storage_path}`)
+        }
+        
+        const fileBuffer = await r2Object.arrayBuffer()
+        
+        // Upload to Gemini File Search
+        const { documentName, storeName } = await uploadToGeminiFileSearch(
+          fileBuffer,
+          doc.filename,
+          doc.id,
+          doc.matter_id,
+          doc.bates_start,
+          GEMINI_API_KEY
+        )
+        
+        // Update database
+        await DB.prepare(`
+          UPDATE documents 
+          SET gemini_document_name = ?,
+              gemini_store_name = ?,
+              text_extracted = TRUE,
+              review_status = 'indexed'
+          WHERE id = ?
+        `).bind(documentName, storeName, doc.id).run()
+        
+        // Update matter with store name
+        await DB.prepare(`
+          UPDATE matters 
+          SET gemini_store_name = ? 
+          WHERE id = ? AND gemini_store_name IS NULL
+        `).bind(storeName, doc.matter_id).run()
+        
+        migrated++
+        
+        // Log progress every 10 documents
+        if (migrated % 10 === 0) {
+          console.log(`[MIGRATION] Progress: ${migrated}/${totalDocs} (${(migrated/totalDocs*100).toFixed(1)}%)`)
+        }
+        
+      } catch (error: any) {
+        failed++
+        const errorMsg = `Doc ${doc.id} (${doc.filename}): ${error.message}`
+        console.error(`[MIGRATION ERROR] ${errorMsg}`)
+        errors.push(errorMsg)
+        
+        // Continue with next document even if this one fails
+        continue
+      }
+    }
+    
+    console.log(`[MIGRATION] Complete! Migrated: ${migrated}, Failed: ${failed}`)
+    
+    return c.json({
+      success: true,
+      migrated,
+      failed,
+      total: totalDocs,
+      errors: errors.slice(0, 10)  // Return first 10 errors
+    })
+    
+  } catch (error: any) {
+    console.error('[MIGRATION] Fatal error:', error)
     return c.json({ error: error.message }, 500)
   }
 })

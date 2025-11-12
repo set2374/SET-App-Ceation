@@ -44,6 +44,7 @@ export async function uploadToGeminiFileSearch(
     file: buffer,
     fileSearchStoreName: fileSearchStore.name,
     config: {
+      mimeType: 'application/pdf',  // Required for Gemini to process the file
       displayName: batesNumber,  // Use Bates number as display name for citations
       customMetadata: [
         { key: "document_id", numericValue: documentId },
@@ -93,9 +94,10 @@ export async function uploadToGeminiFileSearch(
  */
 export async function queryGeminiFileSearch(
   question: string,
-  matterId: number,
+  storeName: string,
   apiKey: string,
-  selectedDocuments?: number[]
+  selectedDocuments?: number[],
+  matterId?: number
 ): Promise<{
   response: string
   citations: Array<{
@@ -108,14 +110,16 @@ export async function queryGeminiFileSearch(
 }> {
   const ai = new GoogleGenAI({ apiKey })
   
-  const storeName = `matter-${matterId}-tls-ediscovery`
-  
   // Build metadata filter
-  let metadataFilter = `matter_id=${matterId}`
+  let metadataFilter = matterId ? `matter_id=${matterId}` : ''
   
   if (selectedDocuments && selectedDocuments.length > 0) {
     const docFilter = selectedDocuments.map(id => `document_id=${id}`).join(' OR ')
-    metadataFilter = `(${docFilter}) AND ${metadataFilter}`
+    if (metadataFilter) {
+      metadataFilter = `(${docFilter}) AND ${metadataFilter}`
+    } else {
+      metadataFilter = docFilter
+    }
   }
   
   console.log(`[GEMINI] Querying File Search Store: ${storeName}`)
@@ -135,8 +139,8 @@ export async function queryGeminiFileSearch(
         config: {
           tools: [{
             fileSearch: {
-              fileSearchStoreNames: [`fileSearchStores/${storeName}`],
-              metadataFilter: metadataFilter
+              fileSearchStoreNames: [storeName],  // storeName already includes 'fileSearchStores/' prefix
+              metadataFilter: metadataFilter || undefined  // Only pass if it exists
             }
           }]
         }
