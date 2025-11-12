@@ -1,20 +1,9 @@
--- Migration: Add document_pages table for page-level text indexing
+-- Migration: Add ocr_confidence column to document_pages table
 -- Version: 2.0.0
 -- Date: 2025-11-01
 
--- Create document_pages table for storing page-level text with Bates numbers
-CREATE TABLE IF NOT EXISTS document_pages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  document_id INTEGER NOT NULL,
-  page_number INTEGER NOT NULL,
-  bates_number TEXT NOT NULL,
-  page_text TEXT,
-  ocr_confidence REAL DEFAULT 1.0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
-);
+-- The document_pages table already exists from migration 0001
+-- This migration adds the ocr_confidence column
 
--- Create indexes for fast lookups
-CREATE INDEX IF NOT EXISTS idx_document_pages_document_id ON document_pages(document_id);
-CREATE INDEX IF NOT EXISTS idx_document_pages_bates_number ON document_pages(bates_number);
-CREATE INDEX IF NOT EXISTS idx_document_pages_text_search ON document_pages(document_id, page_number);
+-- Add ocr_confidence column to existing document_pages table
+ALTER TABLE document_pages ADD COLUMN ocr_confidence REAL DEFAULT 1.0;

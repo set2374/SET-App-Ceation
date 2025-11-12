@@ -1,7 +1,7 @@
 // TLS eDiscovery Platform - NotebookLM-Style Interface
 
 // Global state
-let currentMatter = 1;
+let currentMatter = parseInt(localStorage.getItem('currentMatter')) || 1; // Persist matter selection
 let selectedSources = [];
 let notes = [];
 let chatHistory = [];
@@ -579,7 +579,9 @@ function setupEventListeners() {
   if (matterSelector) {
     matterSelector.addEventListener('change', async (e) => {
       currentMatter = parseInt(e.target.value);
+      localStorage.setItem('currentMatter', currentMatter); // Persist selection
       await loadDocuments();
+      await loadNotes(); // Reload notes for new matter
       showNotification(`Switched to ${e.target.options[e.target.selectedIndex].text}`, 'success');
     });
   }
@@ -1379,51 +1381,95 @@ async function handleFileUpload(event) {
 // Extract text from PDF using PDF.js
 async function extractTextFromPDF(file, documentId, batesStart) {
   try {
+    console.log(`[TEXT EXTRACTION] Starting extraction for: ${file.name}, Document ID: ${documentId}`);
     showNotification(`Extracting text from ${file.name}...`, 'info');
     
-    // Configure PDF.js worker
-    if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    // Check if PDF.js is loaded
+    if (typeof pdfjsLib === 'undefined') {
+      const errorMsg = 'PDF.js library not loaded. Check CDN connection.';
+      console.error(`[TEXT EXTRACTION ERROR] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
+    console.log('[TEXT EXTRACTION] PDF.js library loaded successfully');
+    
+    // Configure PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    console.log('[TEXT EXTRACTION] PDF.js worker configured');
     
     // Read file as ArrayBuffer
+    console.log(`[TEXT EXTRACTION] Reading file as ArrayBuffer (${file.size} bytes)...`);
     const arrayBuffer = await file.arrayBuffer();
+    console.log(`[TEXT EXTRACTION] ArrayBuffer created: ${arrayBuffer.byteLength} bytes`);
+    
+    if (arrayBuffer.byteLength === 0) {
+      throw new Error('PDF file is empty (0 bytes)');
+    }
     
     // Load PDF document
+    console.log('[TEXT EXTRACTION] Loading PDF document with PDF.js...');
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
+    console.log(`[TEXT EXTRACTION] PDF loaded successfully. Pages: ${pdf.numPages}`);
     
     const pageCount = pdf.numPages;
+    if (pageCount === 0) {
+      throw new Error('PDF has 0 pages');
+    }
+    
     const pages = [];
     let fullText = '';
+    let totalTextLength = 0;
     
     // Extract text from each page
+    console.log(`[TEXT EXTRACTION] Beginning page-by-page extraction (${pageCount} pages)...`);
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      
-      // Concatenate text items with spaces
-      const pageText = textContent.items
-        .map(item => item.str)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      pages.push({
-        page_number: pageNum,
-        text: pageText,
-        confidence: 1.0  // PDF.js extraction has 100% confidence (native text)
-      });
-      
-      fullText += pageText + '\n\n';
-      
-      // Show progress
-      if (pageNum % 10 === 0 || pageNum === pageCount) {
-        showNotification(`Extracting: ${pageNum}/${pageCount} pages...`, 'info');
+      try {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        // Concatenate text items with spaces
+        const pageText = textContent.items
+          .map(item => item.str)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        totalTextLength += pageText.length;
+        
+        pages.push({
+          page_number: pageNum,
+          text: pageText,
+          confidence: 1.0  // PDF.js extraction has 100% confidence (native text)
+        });
+        
+        fullText += pageText + '\n\n';
+        
+        // Log progress every 10 pages
+        if (pageNum % 10 === 0 || pageNum === pageCount) {
+          console.log(`[TEXT EXTRACTION] Progress: ${pageNum}/${pageCount} pages, ${totalTextLength} chars extracted`);
+          showNotification(`Extracting: ${pageNum}/${pageCount} pages...`, 'info');
+        }
+      } catch (pageError) {
+        console.error(`[TEXT EXTRACTION ERROR] Failed on page ${pageNum}:`, pageError);
+        // Continue with next page, but record empty text for this page
+        pages.push({
+          page_number: pageNum,
+          text: '',
+          confidence: 0.0
+        });
       }
     }
     
+    console.log(`[TEXT EXTRACTION] Extraction complete. Total text length: ${totalTextLength} characters`);
+    
+    // Warning if no text was extracted (might be image-based PDF)
+    if (totalTextLength === 0) {
+      console.warn('[TEXT EXTRACTION WARNING] No text extracted - PDF may be image-based and require OCR');
+      showNotification(`⚠ No text found in ${file.name} - may be scanned/image-based PDF`, 'warning');
+    }
+    
     // Send extracted text to backend
+    console.log(`[TEXT EXTRACTION] Sending ${pages.length} pages to backend API...`);
     const response = await fetch(`/api/documents/${documentId}/extract-text`, {
       method: 'POST',
       headers: {
@@ -1436,13 +1482,23 @@ async function extractTextFromPDF(file, documentId, batesStart) {
       })
     });
     
+    console.log(`[TEXT EXTRACTION] Backend response status: ${response.status}`);
+    
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Text extraction failed');
+      const errorText = await response.text();
+      let errorMsg;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMsg = errorJson.error || 'Text extraction failed';
+      } catch {
+        errorMsg = `Backend error (${response.status}): ${errorText.substring(0, 200)}`;
+      }
+      console.error(`[TEXT EXTRACTION ERROR] Backend returned error: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
     
     const result = await response.json();
-    console.log('Text extraction successful:', result);
+    console.log('[TEXT EXTRACTION SUCCESS] Backend confirmed:', result);
     showNotification(
       `✓ Extracted ${result.pages_extracted} pages from ${file.name} (${result.bates_range})`, 
       'success'
@@ -1451,8 +1507,26 @@ async function extractTextFromPDF(file, documentId, batesStart) {
     return result;
     
   } catch (error) {
-    console.error('Text extraction error:', error);
-    showNotification(`Text extraction failed for ${file.name}: ${error.message}`, 'error');
+    console.error('[TEXT EXTRACTION ERROR] Fatal error:', error);
+    console.error('[TEXT EXTRACTION ERROR] Error stack:', error.stack);
+    
+    // Provide detailed error message to user
+    let userMessage = `Cannot extract text from ${file.name}`;
+    if (error.message.includes('PDF.js library not loaded')) {
+      userMessage += ': PDF library failed to load. Check your internet connection.';
+    } else if (error.message.includes('empty') || error.message.includes('0 bytes')) {
+      userMessage += ': File is empty or corrupted.';
+    } else if (error.message.includes('0 pages')) {
+      userMessage += ': PDF has no pages.';
+    } else if (error.message.includes('No text found')) {
+      userMessage += ': This appears to be a scanned/image-based PDF that requires OCR.';
+    } else if (error.message.includes('Backend error')) {
+      userMessage += ': Server error - ' + error.message;
+    } else {
+      userMessage += ': ' + error.message;
+    }
+    
+    showNotification(userMessage, 'error');
     
     // Don't throw - allow upload to succeed even if extraction fails
     // User can manually trigger extraction later or use OCR fallback
@@ -1463,7 +1537,68 @@ async function extractTextFromPDF(file, documentId, batesStart) {
 // Utility: Show notification
 function showNotification(message, type = 'info') {
   console.log(`[${type.toUpperCase()}] ${message}`);
-  // TODO: Implement toast notification UI
+  
+  // Create toast container if it doesn't exist
+  let toastContainer = document.getElementById('toast-container');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'toast-container';
+    toastContainer.className = 'fixed top-4 right-4 z-50 space-y-2';
+    document.body.appendChild(toastContainer);
+  }
+  
+  // Create toast element
+  const toast = document.createElement('div');
+  toast.className = `
+    max-w-sm p-4 rounded-lg shadow-lg border transform transition-all duration-300 ease-in-out
+    ${type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : ''}
+    ${type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : ''}
+    ${type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : ''}
+    ${type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-800' : ''}
+  `;
+  
+  // Icon based on type
+  const icons = {
+    error: '<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>',
+    success: '<svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>',
+    warning: '<svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
+    info: '<svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>'
+  };
+  
+  toast.innerHTML = `
+    <div class="flex items-start space-x-3">
+      <div class="flex-shrink-0">
+        ${icons[type] || icons.info}
+      </div>
+      <div class="flex-1 text-sm font-medium">
+        ${escapeHtml(message)}
+      </div>
+      <button class="flex-shrink-0 text-gray-400 hover:text-gray-600" onclick="this.parentElement.parentElement.remove()">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Add to container with animation
+  toast.style.opacity = '0';
+  toast.style.transform = 'translateX(100%)';
+  toastContainer.appendChild(toast);
+  
+  // Trigger animation
+  setTimeout(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(0)';
+  }, 10);
+  
+  // Auto-remove after delay (longer for errors)
+  const duration = type === 'error' ? 10000 : type === 'warning' ? 7000 : 5000;
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
 }
 
 // Utility: Escape HTML
@@ -1496,12 +1631,20 @@ async function loadMatters() {
       `<option value="${matter.id}">${matter.name} (${matter.bates_prefix})</option>`
     ).join('');
     
-    // Set current matter to first in list if exists
-    if (matters.length > 0) {
+    // Restore saved matter selection from localStorage, or use first matter
+    const savedMatterId = parseInt(localStorage.getItem('currentMatter'));
+    const matterExists = matters.some(m => m.id === savedMatterId);
+    
+    if (matterExists) {
+      currentMatter = savedMatterId;
+      selector.value = savedMatterId;
+    } else if (matters.length > 0) {
       currentMatter = matters[0].id;
+      selector.value = matters[0].id;
+      localStorage.setItem('currentMatter', matters[0].id);
     }
     
-    console.log('Loaded matters:', matters);
+    console.log('Loaded matters:', matters, 'Current matter:', currentMatter);
   } catch (error) {
     console.error('Error loading matters:', error);
     showNotification('Failed to load matters', 'error');

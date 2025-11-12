@@ -661,17 +661,47 @@ body {
     overflow: hidden;
   }
   
-  /* Header - more compact */
+  /* Header - ULTRA COMPACT for landscape to maximize chat space */
   header {
-    padding: 0.5rem 1rem !important;
+    padding: 0.25rem 0.75rem !important;
+    min-height: 40px !important;
+    height: 40px !important;
   }
   
   header h1 {
-    font-size: 1.125rem;
+    font-size: 0.875rem !important;
+    line-height: 1.2 !important;
+  }
+  
+  header p {
+    display: none !important; /* Hide "AI-Powered Document Review" subtitle */
   }
   
   header img {
-    height: 2.5rem;
+    height: 1.75rem !important;
+    width: auto !important;
+  }
+  
+  /* Compact matter selector and user name */
+  header select,
+  header button,
+  header .flex.items-center {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+  
+  /* Hide "New Matter" button text on landscape mobile */
+  #create-matter-btn span {
+    display: none !important;
+  }
+  
+  #create-matter-btn svg {
+    margin: 0 !important;
+  }
+  
+  /* User name compact */
+  header .flex.items-center span {
+    font-size: 0.75rem !important;
   }
   
   /* Override Tailwind flex classes to force row layout */
