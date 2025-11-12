@@ -48,46 +48,91 @@ export async function uploadToGeminiFileSearch(
     console.log(`[GEMINI] Using existing File Search Store: ${storeName}`)
   }
   
-  // Convert ArrayBuffer to base64 for REST API upload
+  // Step 1: Upload file to Google File API first
   const buffer = Buffer.from(fileBuffer)
   const base64Data = buffer.toString('base64')
   
-  console.log(`[GEMINI] Uploading ${fileName} (${buffer.length} bytes) via REST API...`)
+  console.log(`[GEMINI] Step 1: Uploading file to Google File API (${buffer.length} bytes)...`)
   
-  // Upload document via REST API
-  const uploadResponse = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/${storeName}/documents:import?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inlineSource: {
-          mimeType: 'application/pdf',
-          data: base64Data
+  let fileResource
+  try {
+    const fileUploadResponse = await fetch(
+      `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Upload-Protocol': 'multipart'
         },
-        displayName: batesNumber,
-        metadata: {
-          document_id: documentId.toString(),
-          matter_id: matterId.toString(),
-          bates_number: batesNumber,
-          original_filename: fileName
-        },
-        chunkingConfig: {
-          chunkSize: 500,
-          chunkOverlap: 100
-        }
-      })
+        body: JSON.stringify({
+          file: {
+            displayName: batesNumber,
+            mimeType: 'application/pdf'
+          },
+          content: base64Data
+        })
+      }
+    )
+    
+    if (!fileUploadResponse.ok) {
+      const error = await fileUploadResponse.text()
+      console.error(`[GEMINI] File upload failed (${fileUploadResponse.status}):`, error)
+      throw new Error(`File upload failed: ${error}`)
     }
-  )
+    
+    fileResource = await fileUploadResponse.json()
+    console.log(`[GEMINI] File uploaded successfully: ${fileResource.name || fileResource.uri}`)
+  } catch (fileError: any) {
+    console.error(`[GEMINI] File upload exception:`, fileError.message)
+    throw new Error(`File upload failed: ${fileError.message}`)
+  }
+  
+  // Step 2: Import the uploaded file into File Search Store
+  console.log(`[GEMINI] Step 2: Importing file into File Search Store...`)
+  
+  let uploadResponse
+  try {
+    uploadResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${storeName}/documents:import?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uri: fileResource.uri || fileResource.name,
+          displayName: batesNumber,
+          metadata: {
+            document_id: documentId.toString(),
+            matter_id: matterId.toString(),
+            bates_number: batesNumber,
+            original_filename: fileName
+          },
+          chunkingConfig: {
+            chunkSize: 500,
+            chunkOverlap: 100
+          }
+        })
+      }
+    )
+    console.log(`[GEMINI] Import request completed. Status: ${uploadResponse.status}`)
+  } catch (fetchError: any) {
+    console.error(`[GEMINI] Import request threw exception:`, fetchError.message)
+    throw new Error(`Import failed: ${fetchError.message}`)
+  }
   
   if (!uploadResponse.ok) {
     const error = await uploadResponse.text()
-    console.error(`[GEMINI] Upload failed:`, error)
-    throw new Error(`Failed to upload document: ${error}`)
+    console.error(`[GEMINI] Import failed with status ${uploadResponse.status}:`, error)
+    throw new Error(`Failed to import document (HTTP ${uploadResponse.status}): ${error}`)
   }
   
-  const operation = await uploadResponse.json()
-  console.log(`[GEMINI] Upload initiated. Operation: ${operation.name}`)
+  let operation
+  try {
+    operation = await uploadResponse.json()
+    console.log(`[GEMINI] Import initiated. Operation: ${operation.name || 'NO NAME'}`)
+  } catch (jsonError: any) {
+    console.error(`[GEMINI] Failed to parse JSON response:`, jsonError.message)
+    throw new Error(`JSON parse failed: ${jsonError.message}`)
+  }
   
   // Wait for indexing to complete by polling the operation
   let operationName = operation.name
