@@ -7,6 +7,7 @@ type Bindings = {
   DB: D1Database
   DOCUMENTS: R2Bucket
   ANTHROPIC_API_KEY?: string
+  GEMINI_API_KEY?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -369,9 +370,35 @@ app.get('/api/init-db', async (c) => {
           user_message TEXT NOT NULL,
           ai_response TEXT NOT NULL,
           bates_citations TEXT,
+          model_used TEXT DEFAULT 'gemini-2.5-flash',
+          tokens_used INTEGER,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `).run()
+      
+      await DB.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_chat_history_matter_id ON chat_history(matter_id)
+      `).run()
+    }
+    
+    // Add Gemini fields to documents table if they don't exist
+    try {
+      await DB.prepare(`ALTER TABLE documents ADD COLUMN gemini_document_name TEXT`).run()
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    try {
+      await DB.prepare(`ALTER TABLE documents ADD COLUMN gemini_store_name TEXT`).run()
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    // Add Gemini store name to matters table if it doesn't exist
+    try {
+      await DB.prepare(`ALTER TABLE matters ADD COLUMN gemini_store_name TEXT`).run()
+    } catch (e) {
+      // Column already exists, ignore
     }
     
     // Check if document_classifications table exists
@@ -732,7 +759,7 @@ app.post('/api/notes', async (c) => {
 
 // Upload PDF document
 app.post('/api/upload', async (c) => {
-  const { DB, DOCUMENTS } = c.env
+  const { DB, DOCUMENTS, GEMINI_API_KEY } = c.env
   
   try {
     const formData = await c.req.formData()
@@ -747,6 +774,10 @@ app.post('/api/upload', async (c) => {
       return c.json({ error: 'File must be a PDF' }, 400)
     }
     
+    if (!GEMINI_API_KEY) {
+      return c.json({ error: 'Gemini API key not configured' }, 500)
+    }
+    
     // Get matter info for Bates numbering
     const matter = await DB.prepare('SELECT * FROM matters WHERE id = ?').bind(matterId).first() as any
     if (!matter) {
@@ -755,7 +786,7 @@ app.post('/api/upload', async (c) => {
     
     // Calculate Bates numbers
     const startNumber = matter.next_bates_number
-    const pageCount = 1 // TODO: Get actual page count from PDF
+    const pageCount = 1 // Will be updated by Gemini after processing
     const endNumber = startNumber + pageCount - 1
     
     const batesStart = `${matter.bates_prefix}-${String(startNumber).padStart(6, '0')}`
@@ -765,7 +796,7 @@ app.post('/api/upload', async (c) => {
     const timestamp = Date.now()
     const storagePath = `${matterId}/${timestamp}-${file.name}`
     
-    // Upload to R2
+    // Upload to R2 (chain of custody - original evidence)
     const fileBuffer = await file.arrayBuffer()
     await DOCUMENTS.put(storagePath, fileBuffer, {
       httpMetadata: {
@@ -778,7 +809,7 @@ app.post('/api/upload', async (c) => {
       INSERT INTO documents (
         matter_id, filename, bates_start, bates_end, page_count,
         file_size, storage_path, text_extracted, review_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, 'indexing')
     `).bind(
       matterId,
       file.name,
@@ -789,6 +820,47 @@ app.post('/api/upload', async (c) => {
       storagePath
     ).run()
     
+    const documentId = result.meta.last_row_id as number
+    
+    // Upload to Gemini File Search (async - will update document when complete)
+    // Import the Gemini module dynamically
+    const { uploadToGeminiFileSearch } = await import('./gemini')
+    
+    // Start async indexing (don't wait for completion)
+    uploadToGeminiFileSearch(
+      fileBuffer,
+      file.name,
+      documentId,
+      parseInt(matterId),
+      batesStart,
+      GEMINI_API_KEY
+    ).then(async ({ documentName, storeName }) => {
+      // Update document with Gemini references
+      await DB.prepare(`
+        UPDATE documents 
+        SET gemini_document_name = ?,
+            gemini_store_name = ?,
+            text_extracted = TRUE,
+            review_status = 'indexed'
+        WHERE id = ?
+      `).bind(documentName, storeName, documentId).run()
+      
+      // Update matter with store name if not set
+      if (!matter.gemini_store_name) {
+        await DB.prepare(`
+          UPDATE matters SET gemini_store_name = ? WHERE id = ?
+        `).bind(storeName, matterId).run()
+      }
+      
+      console.log(`[UPLOAD] Document ${documentId} indexed successfully in Gemini`)
+    }).catch(error => {
+      console.error(`[UPLOAD] Gemini indexing failed for document ${documentId}:`, error)
+      // Update status to show indexing failed
+      DB.prepare(`
+        UPDATE documents SET review_status = 'indexing_failed' WHERE id = ?
+      `).bind(documentId).run()
+    })
+    
     // Update matter's next Bates number
     await DB.prepare(`
       UPDATE matters SET next_bates_number = ? WHERE id = ?
@@ -797,13 +869,15 @@ app.post('/api/upload', async (c) => {
     return c.json({
       success: true,
       document: {
-        id: result.meta.last_row_id,
+        id: documentId,
         filename: file.name,
         bates_start: batesStart,
         bates_end: batesEnd,
         page_count: pageCount,
-        storage_path: storagePath
-      }
+        storage_path: storagePath,
+        status: 'indexing'
+      },
+      message: 'Document uploaded. Gemini indexing in progress...'
     })
   } catch (error: any) {
     console.error('Upload error:', error)
@@ -1040,7 +1114,7 @@ app.post('/api/reports/hot-documents', async (c) => {
 
 // Chat with Claude Sonnet 3.5
 app.post('/api/chat', async (c) => {
-  const { DB, ANTHROPIC_API_KEY } = c.env
+  const { DB, GEMINI_API_KEY } = c.env
   
   try {
     const { message, matter_id, selected_sources } = await c.req.json()
@@ -1049,119 +1123,57 @@ app.post('/api/chat', async (c) => {
       return c.json({ error: 'Message is required' }, 400)
     }
     
-    if (!ANTHROPIC_API_KEY) {
-      return c.json({ error: 'Anthropic API key not configured' }, 500)
+    if (!GEMINI_API_KEY) {
+      return c.json({ error: 'Gemini API key not configured' }, 500)
     }
     
-    // Get selected documents
-    let documentsContext = ''
-    if (selected_sources && selected_sources.length > 0) {
-      const placeholders = selected_sources.map(() => '?').join(',')
-      const docs = await DB.prepare(`
-        SELECT id, filename, bates_start, bates_end, extracted_text, page_count
-        FROM documents
-        WHERE id IN (${placeholders})
-      `).bind(...selected_sources).all()
-      
-      documentsContext = docs.results?.map((doc: any) => {
-        return `Document: ${doc.filename} (Bates: ${doc.bates_start}${doc.page_count > 1 ? ' - ' + doc.bates_end : ''})
-${doc.extracted_text ? 'Content: ' + doc.extracted_text.substring(0, 2000) : '[Text not yet extracted]'}`
-      }).join('\n\n---\n\n') || ''
-    }
+    // Import Gemini query function
+    const { queryGeminiFileSearch } = await import('./gemini')
     
-    // Build system prompt for legal document analysis
-    const systemPrompt = `You are a legal AI assistant specializing in document review for litigation. Your role is to:
+    // Build enhanced legal prompt
+    const legalPrompt = `${message}
 
-1. Analyze legal documents for attorney-client privilege, work product doctrine, and other privilege claims
-2. Identify "hot documents" - evidence with significant litigation value such as:
-   - Admissions against interest
-   - Contradictory statements
-   - Smoking gun evidence
-   - Key witness communications
-   - Documents showing knowledge, intent, or consciousness of guilt
-3. Flag "bad documents" - evidence potentially harmful to the client's position
+You are a legal AI assistant specializing in document review for litigation. When analyzing these documents:
+
+1. Identify attorney-client privilege, work product doctrine, and other privilege claims
+2. Flag "hot documents" with significant litigation value (admissions, contradictions, smoking guns, key witness communications)
+3. Note "bad documents" potentially harmful to the client
 4. Extract key facts, dates, parties, and dollar amounts
-5. Provide legal reasoning for your determinations
+5. Provide legal reasoning for determinations with confidence levels (high/medium/low)
 
-When referencing documents, ALWAYS use their Bates numbers in this format: [BATES: VQ-000001]
+CRITICAL: When citing documents, reference them by their Bates numbers (the display name shown).`
 
-Be thorough but concise. Provide confidence levels (high/medium/low) for privilege determinations.
-
-Available documents for this query:
-${documentsContext || '[No documents selected - user may be asking a general question]'}`
-
-    // Call Claude API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        messages: [
-          {
-            role: 'user',
-            content: message
-          }
-        ],
-        system: systemPrompt
-      })
-    })
+    // Query Gemini with File Search
+    const { response: aiResponse, citations, tokensUsed } = await queryGeminiFileSearch(
+      legalPrompt,
+      matter_id || 1,
+      GEMINI_API_KEY,
+      selected_sources
+    )
     
-    if (!response.ok) {
-      const error = await response.text()
-      console.error('Claude API error:', error)
-      return c.json({ error: 'Failed to get AI response', details: error }, 500)
-    }
-    
-    const data = await response.json() as any
-    const aiResponse = data.content[0].text
-    
-    // Extract Bates citations from response
-    const batesCitations = aiResponse.match(/\[BATES: ([^\]]+)\]/g)?.map((match: string) => 
-      match.replace('[BATES: ', '').replace(']', '')
-    ) || []
-    
-    // Verify Bates citations to detect hallucinations
-    let validatedCitations: string[] = []
-    let hallucinations: string[] = []
-    
-    if (batesCitations.length > 0) {
-      const placeholders = batesCitations.map(() => '?').join(',')
-      const validDocs = await DB.prepare(`
-        SELECT bates_start FROM documents 
-        WHERE matter_id = ? AND bates_start IN (${placeholders})
-      `).bind(matter_id || 1, ...batesCitations).all()
-      
-      validatedCitations = validDocs.results?.map((doc: any) => doc.bates_start) || []
-      hallucinations = batesCitations.filter(citation => !validatedCitations.includes(citation))
-    }
+    // Extract Bates numbers from citations
+    const batesCitations = citations.map(c => c.batesNumber).filter(b => b)
     
     // Save to chat history
     await DB.prepare(`
-      INSERT INTO chat_history (matter_id, user_message, ai_response, bates_citations)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO chat_history (matter_id, user_message, ai_response, bates_citations, model_used, tokens_used)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
       matter_id || 1,
       message,
       aiResponse,
-      batesCitations.join(', ') || null
+      batesCitations.join(', ') || null,
+      'gemini-2.5-flash',
+      tokensUsed
     ).run()
     
     return c.json({
       response: aiResponse,
+      citations: citations,
       bates_citations: batesCitations,
-      validated_citations: validatedCitations,
-      hallucinated_citations: hallucinations,
-      hallucination_detected: hallucinations.length > 0,
-      model: 'claude-3-haiku-20240307',
-      tokens_used: data.usage?.input_tokens + data.usage?.output_tokens || 0,
-      warning: hallucinations.length > 0 
-        ? `⚠️ WARNING: AI referenced non-existent document(s): ${hallucinations.join(', ')}. Verify all citations before relying on this analysis.`
-        : null
+      model: 'gemini-2.5-flash',
+      tokens_used: tokensUsed,
+      cost_estimate: (tokensUsed * 0.075 / 1000000).toFixed(4)  // $0.075 per 1M tokens
     })
   } catch (error: any) {
     console.error('Chat error:', error)

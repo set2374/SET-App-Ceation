@@ -1,0 +1,184 @@
+// Gemini File Search Integration for TLS eDiscovery Platform
+// Uses Google Generative AI SDK with Gemini 2.5 Flash
+
+import { GoogleGenAI } from '@google/genai'
+
+/**
+ * Upload a PDF document to Gemini File Search and get it indexed
+ */
+export async function uploadToGeminiFileSearch(
+  fileBuffer: ArrayBuffer,
+  fileName: string,
+  documentId: number,
+  matterId: number,
+  batesNumber: string,
+  apiKey: string
+): Promise<{ documentName: string; storeName: string }> {
+  const ai = new GoogleGenAI({ apiKey })
+  
+  // Get or create File Search Store for this matter
+  const storeName = `matter-${matterId}-tls-ediscovery`
+  let fileSearchStore
+  
+  try {
+    // Try to get existing store
+    fileSearchStore = await ai.fileSearchStores.get({ 
+      name: `fileSearchStores/${storeName}` 
+    })
+    console.log(`[GEMINI] Using existing File Search Store: ${storeName}`)
+  } catch (error) {
+    // Create new store for this matter
+    console.log(`[GEMINI] Creating new File Search Store: ${storeName}`)
+    fileSearchStore = await ai.fileSearchStores.create({
+      config: { displayName: storeName }
+    })
+  }
+  
+  // Convert ArrayBuffer to Buffer for upload
+  const buffer = Buffer.from(fileBuffer)
+  
+  console.log(`[GEMINI] Uploading ${fileName} (${buffer.length} bytes) to File Search Store...`)
+  
+  // Upload and import document with metadata
+  let operation = await ai.fileSearchStores.uploadToFileSearchStore({
+    file: buffer,
+    fileSearchStoreName: fileSearchStore.name,
+    config: {
+      displayName: batesNumber,  // Use Bates number as display name for citations
+      customMetadata: [
+        { key: "document_id", numericValue: documentId },
+        { key: "matter_id", numericValue: matterId },
+        { key: "bates_number", stringValue: batesNumber },
+        { key: "original_filename", stringValue: fileName }
+      ],
+      chunkingConfig: {
+        whiteSpaceConfig: {
+          maxTokensPerChunk: 500,   // Larger chunks for legal documents
+          maxOverlapTokens: 100      // Ensure context continuity
+        }
+      }
+    }
+  })
+  
+  console.log(`[GEMINI] Upload initiated. Waiting for indexing to complete...`)
+  
+  // Wait for indexing to complete
+  let attempts = 0
+  const maxAttempts = 60  // 5 minutes max
+  
+  while (!operation.done && attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 5000))  // Wait 5 seconds
+    operation = await ai.operations.get({ operation })
+    attempts++
+    
+    if (attempts % 6 === 0) {  // Log every 30 seconds
+      console.log(`[GEMINI] Still indexing... (${attempts * 5}s elapsed)`)
+    }
+  }
+  
+  if (!operation.done) {
+    throw new Error(`Indexing timeout after ${attempts * 5} seconds`)
+  }
+  
+  console.log(`[GEMINI] Indexing complete! Document ready for search.`)
+  
+  return {
+    documentName: operation.response?.name || '',
+    storeName: fileSearchStore.name
+  }
+}
+
+/**
+ * Query Gemini with File Search across matter documents
+ */
+export async function queryGeminiFileSearch(
+  question: string,
+  matterId: number,
+  apiKey: string,
+  selectedDocuments?: number[]
+): Promise<{
+  response: string
+  citations: Array<{
+    documentName: string
+    batesNumber: string
+    confidence: number
+    snippet: string
+  }>
+  tokensUsed: number
+}> {
+  const ai = new GoogleGenAI({ apiKey })
+  
+  const storeName = `matter-${matterId}-tls-ediscovery`
+  
+  // Build metadata filter
+  let metadataFilter = `matter_id=${matterId}`
+  
+  if (selectedDocuments && selectedDocuments.length > 0) {
+    const docFilter = selectedDocuments.map(id => `document_id=${id}`).join(' OR ')
+    metadataFilter = `(${docFilter}) AND ${metadataFilter}`
+  }
+  
+  console.log(`[GEMINI] Querying File Search Store: ${storeName}`)
+  console.log(`[GEMINI] Filter: ${metadataFilter}`)
+  console.log(`[GEMINI] Question: ${question}`)
+  
+  // Query with File Search
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: question,
+    config: {
+      tools: [{
+        fileSearch: {
+          fileSearchStoreNames: [`fileSearchStores/${storeName}`],
+          metadataFilter: metadataFilter
+        }
+      }]
+    }
+  })
+  
+  // Extract citations from grounding metadata
+  const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+  
+  const citations = groundingChunks.map((chunk: any) => ({
+    documentName: chunk.web?.title || 'Unknown',
+    batesNumber: chunk.web?.uri || '',
+    confidence: chunk.score || 0,
+    snippet: chunk.content?.substring(0, 200) || ''
+  }))
+  
+  // Calculate token usage
+  const usageMetadata = response.usageMetadata || {}
+  const tokensUsed = (usageMetadata.promptTokenCount || 0) + (usageMetadata.candidatesTokenCount || 0)
+  
+  console.log(`[GEMINI] Response generated. Tokens used: ${tokensUsed}`)
+  console.log(`[GEMINI] Citations found: ${citations.length}`)
+  
+  return {
+    response: response.text || '',
+    citations,
+    tokensUsed
+  }
+}
+
+/**
+ * Get or create File Search Store for a matter
+ */
+export async function getOrCreateFileSearchStore(
+  matterId: number,
+  apiKey: string
+): Promise<string> {
+  const ai = new GoogleGenAI({ apiKey })
+  const storeName = `matter-${matterId}-tls-ediscovery`
+  
+  try {
+    const store = await ai.fileSearchStores.get({ 
+      name: `fileSearchStores/${storeName}` 
+    })
+    return store.name
+  } catch {
+    const store = await ai.fileSearchStores.create({
+      config: { displayName: storeName }
+    })
+    return store.name
+  }
+}
