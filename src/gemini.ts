@@ -122,19 +122,47 @@ export async function queryGeminiFileSearch(
   console.log(`[GEMINI] Filter: ${metadataFilter}`)
   console.log(`[GEMINI] Question: ${question}`)
   
-  // Query with File Search
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: question,
-    config: {
-      tools: [{
-        fileSearch: {
-          fileSearchStoreNames: [`fileSearchStores/${storeName}`],
-          metadataFilter: metadataFilter
+  // Query with File Search - with retry logic for 503 errors
+  let response
+  let lastError
+  const maxRetries = 3
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: question,
+        config: {
+          tools: [{
+            fileSearch: {
+              fileSearchStoreNames: [`fileSearchStores/${storeName}`],
+              metadataFilter: metadataFilter
+            }
+          }]
         }
-      }]
+      })
+      break // Success - exit retry loop
+    } catch (error: any) {
+      lastError = error
+      
+      // Check if it's a 503 (service unavailable) or 429 (rate limit) error
+      const is503 = error.message?.includes('503') || error.message?.includes('overloaded')
+      const is429 = error.message?.includes('429') || error.message?.includes('rate limit')
+      
+      if ((is503 || is429) && attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 1000 // Exponential backoff: 2s, 4s, 8s
+        console.log(`[GEMINI] ${is503 ? 'Model overloaded (503)' : 'Rate limited (429)'}. Retrying in ${waitTime/1000}s... (attempt ${attempt}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      } else {
+        // Not a retryable error, or max retries reached
+        throw error
+      }
     }
-  })
+  }
+  
+  if (!response) {
+    throw new Error(`Failed after ${maxRetries} retries: ${lastError?.message || 'Unknown error'}`)
+  }
   
   // Extract citations from grounding metadata
   const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
