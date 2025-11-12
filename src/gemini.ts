@@ -1,10 +1,11 @@
 // Gemini File Search Integration for TLS eDiscovery Platform
-// Uses Google Generative AI SDK with Gemini 2.5 Flash
+// Uses direct REST API calls (SDK incompatible with Cloudflare Workers)
 
 import { GoogleGenAI } from '@google/genai'
 
 /**
- * Upload a PDF document to Gemini File Search and get it indexed
+ * Upload a PDF document to Gemini File Search using REST API
+ * SDK doesn't work in Cloudflare Workers for large file uploads
  */
 export async function uploadToGeminiFileSearch(
   fileBuffer: ArrayBuffer,
@@ -15,65 +16,106 @@ export async function uploadToGeminiFileSearch(
   apiKey: string,
   existingStoreName?: string  // Pass existing store name from database
 ): Promise<{ documentName: string; storeName: string }> {
-  const ai = new GoogleGenAI({ apiKey })
   
-  let fileSearchStore
+  let storeName = existingStoreName
   
-  if (existingStoreName) {
-    // Use existing store from database
-    try {
-      fileSearchStore = await ai.fileSearchStores.get({ name: existingStoreName })
-      console.log(`[GEMINI] Using existing File Search Store from DB: ${existingStoreName}`)
-    } catch (error) {
-      console.error(`[GEMINI] Failed to get existing store ${existingStoreName}:`, error)
-      throw new Error(`File Search Store ${existingStoreName} not found. Please check the database.`)
+  // If no existing store, create one via REST API
+  if (!storeName) {
+    console.log(`[GEMINI] Creating new File Search Store via REST API...`)
+    const displayName = `matter${matterId}tlsediscovery`
+    
+    const createResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/fileSearchStores?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: displayName
+        })
+      }
+    )
+    
+    if (!createResponse.ok) {
+      const error = await createResponse.text()
+      console.error(`[GEMINI] Failed to create store:`, error)
+      throw new Error(`Failed to create File Search Store: ${error}`)
     }
+    
+    const storeData = await createResponse.json()
+    storeName = storeData.name
+    console.log(`[GEMINI] Created new File Search Store: ${storeName}`)
   } else {
-    // Create new store for this matter
-    const displayName = `matter-${matterId}-tls-ediscovery`
-    console.log(`[GEMINI] Creating new File Search Store: ${displayName}`)
-    fileSearchStore = await ai.fileSearchStores.create({
-      config: { displayName }
-    })
-    console.log(`[GEMINI] Created new File Search Store: ${fileSearchStore.name}`)
+    console.log(`[GEMINI] Using existing File Search Store: ${storeName}`)
   }
   
-  // Convert ArrayBuffer to Buffer for upload
+  // Convert ArrayBuffer to base64 for REST API upload
   const buffer = Buffer.from(fileBuffer)
+  const base64Data = buffer.toString('base64')
   
-  console.log(`[GEMINI] Uploading ${fileName} (${buffer.length} bytes) to File Search Store...`)
+  console.log(`[GEMINI] Uploading ${fileName} (${buffer.length} bytes) via REST API...`)
   
-  // Upload and import document with metadata
-  let operation = await ai.fileSearchStores.uploadToFileSearchStore({
-    file: buffer,
-    fileSearchStoreName: fileSearchStore.name,
-    config: {
-      mimeType: 'application/pdf',  // Required for Gemini to process the file
-      displayName: batesNumber,  // Use Bates number as display name for citations
-      customMetadata: [
-        { key: "document_id", numericValue: documentId },
-        { key: "matter_id", numericValue: matterId },
-        { key: "bates_number", stringValue: batesNumber },
-        { key: "original_filename", stringValue: fileName }
-      ],
-      chunkingConfig: {
-        whiteSpaceConfig: {
-          maxTokensPerChunk: 500,   // Larger chunks for legal documents
-          maxOverlapTokens: 100      // Ensure context continuity
+  // Upload document via REST API
+  const uploadResponse = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/${storeName}/documents:import?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inlineSource: {
+          mimeType: 'application/pdf',
+          data: base64Data
+        },
+        displayName: batesNumber,
+        metadata: {
+          document_id: documentId.toString(),
+          matter_id: matterId.toString(),
+          bates_number: batesNumber,
+          original_filename: fileName
+        },
+        chunkingConfig: {
+          chunkSize: 500,
+          chunkOverlap: 100
         }
-      }
+      })
     }
-  })
+  )
   
-  console.log(`[GEMINI] Upload initiated. Waiting for indexing to complete...`)
+  if (!uploadResponse.ok) {
+    const error = await uploadResponse.text()
+    console.error(`[GEMINI] Upload failed:`, error)
+    throw new Error(`Failed to upload document: ${error}`)
+  }
   
-  // Wait for indexing to complete
+  const operation = await uploadResponse.json()
+  console.log(`[GEMINI] Upload initiated. Operation: ${operation.name}`)
+  
+  // Wait for indexing to complete by polling the operation
+  let operationName = operation.name
   let attempts = 0
   const maxAttempts = 60  // 5 minutes max
+  let done = false
+  let documentName = ''
   
-  while (!operation.done && attempts < maxAttempts) {
+  while (!done && attempts < maxAttempts) {
     await new Promise(resolve => setTimeout(resolve, 5000))  // Wait 5 seconds
-    operation = await ai.operations.get({ operation })
+    
+    const statusResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+    )
+    
+    if (!statusResponse.ok) {
+      console.error(`[GEMINI] Failed to check operation status`)
+      attempts++
+      continue
+    }
+    
+    const status = await statusResponse.json()
+    done = status.done || false
+    
+    if (done && status.response) {
+      documentName = status.response.name || ''
+    }
+    
     attempts++
     
     if (attempts % 6 === 0) {  // Log every 30 seconds
@@ -81,15 +123,15 @@ export async function uploadToGeminiFileSearch(
     }
   }
   
-  if (!operation.done) {
+  if (!done) {
     throw new Error(`Indexing timeout after ${attempts * 5} seconds`)
   }
   
-  console.log(`[GEMINI] Indexing complete! Document ready for search.`)
+  console.log(`[GEMINI] Indexing complete! Document: ${documentName}`)
   
   return {
-    documentName: operation.response?.name || '',
-    storeName: fileSearchStore.name
+    documentName: documentName,
+    storeName: storeName
   }
 }
 

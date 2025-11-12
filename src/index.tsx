@@ -826,6 +826,10 @@ app.post('/api/upload', async (c) => {
     // Import the Gemini module dynamically
     const { uploadToGeminiFileSearch } = await import('./gemini')
     
+    console.log(`[UPLOAD] Starting Gemini upload for document ${documentId}`)
+    console.log(`[UPLOAD] Matter store name: ${matter.gemini_store_name || 'none - will create new'}`)
+    console.log(`[UPLOAD] API key available: ${GEMINI_API_KEY ? 'yes' : 'NO - THIS IS THE PROBLEM'}`)
+    
     // Start async indexing (don't wait for completion)
     // Pass existing store name from matter if it exists
     uploadToGeminiFileSearch(
@@ -837,6 +841,10 @@ app.post('/api/upload', async (c) => {
       GEMINI_API_KEY,
       matter.gemini_store_name || undefined
     ).then(async ({ documentName, storeName }) => {
+      console.log(`[UPLOAD] Gemini upload SUCCESS for document ${documentId}`)
+      console.log(`[UPLOAD] Document name: ${documentName}`)
+      console.log(`[UPLOAD] Store name: ${storeName}`)
+      
       // Update document with Gemini references
       await DB.prepare(`
         UPDATE documents 
@@ -856,11 +864,20 @@ app.post('/api/upload', async (c) => {
       
       console.log(`[UPLOAD] Document ${documentId} indexed successfully in Gemini`)
     }).catch(error => {
-      console.error(`[UPLOAD] Gemini indexing failed for document ${documentId}:`, error)
+      console.error(`[UPLOAD] Gemini indexing FAILED for document ${documentId}`)
+      console.error(`[UPLOAD] Error type: ${error?.constructor?.name || 'unknown'}`)
+      console.error(`[UPLOAD] Error message: ${error?.message || 'no message'}`)
+      console.error(`[UPLOAD] Full error:`, error)
+      
       // Update status to show indexing failed
-      DB.prepare(`
-        UPDATE documents SET review_status = 'indexing_failed' WHERE id = ?
-      `).bind(documentId).run()
+      try {
+        DB.prepare(`
+          UPDATE documents SET review_status = 'indexing_failed' WHERE id = ?
+        `).bind(documentId).run()
+        console.log(`[UPLOAD] Updated document ${documentId} status to indexing_failed`)
+      } catch (dbError) {
+        console.error(`[UPLOAD] Could not update DB status:`, dbError)
+      }
     })
     
     // Update matter's next Bates number
