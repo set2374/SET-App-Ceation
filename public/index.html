@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Iron Dome Command</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+        
+        /* CSS Custom Properties for theming */
+        :root {
+            --color-bg: #0a0a0f;
+            --color-primary: #00d4ff;
+            --color-tamir: #00ff88;
+            --color-stunner: #ffaa00;
+            --color-arrow: #ff4488;
+            --color-danger: #ff4444;
+            --color-border: #2a4a6a;
+            --color-text-dim: #4a7a9a;
+            --color-text-light: #aaccee;
+            --hud-bg: linear-gradient(180deg, rgba(20,30,50,0.9) 0%, rgba(10,15,25,0.95) 100%);
+            --btn-bg: linear-gradient(180deg, rgba(30,40,60,0.9) 0%, rgba(20,25,40,0.95) 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        body {
+            background: var(--color-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        .game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            max-width: 100vw;
+            padding: 5px;
+        }
+        
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 900px;
+            padding: 8px 12px;
+            background: var(--hud-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(0,150,255,0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .hud-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 50px;
+        }
+        
+        .hud-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(8px, 2vw, 10px);
+            color: var(--color-text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .hud-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(16px, 4vw, 24px);
+            font-weight: 700;
+            color: var(--color-primary);
+            text-shadow: 0 0 10px rgba(0,212,255,0.5);
+        }
+        
+        .hud-value.score { color: var(--color-tamir); text-shadow: 0 0 10px rgba(0,255,136,0.5); }
+        .hud-value.wave { color: var(--color-stunner); text-shadow: 0 0 10px rgba(255,170,0,0.5); }
+        .hud-value.cities { color: var(--color-arrow); text-shadow: 0 0 10px rgba(255,68,136,0.5); }
+        
+        .interceptor-panel {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        /* Accessible button styling */
+        .interceptor-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 6px 10px;
+            background: var(--btn-bg);
+            border: 2px solid #3a5a7a;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 65px;
+            font-family: inherit;
+            color: inherit;
+        }
+        
+        .interceptor-btn:hover,
+        .interceptor-btn:focus {
+            border-color: #5a8aba;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,150,255,0.3);
+            outline: none;
+        }
+        
+        .interceptor-btn:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+        
+        .interceptor-btn[aria-pressed="true"] {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 20px rgba(0,212,255,0.4), inset 0 0 15px rgba(0,212,255,0.1);
+        }
+        
+        .interceptor-btn.tamir[aria-pressed="true"] { border-color: var(--color-tamir); box-shadow: 0 0 20px rgba(0,255,136,0.4); }
+        .interceptor-btn.stunner[aria-pressed="true"] { border-color: var(--color-stunner); box-shadow: 0 0 20px rgba(255,170,0,0.4); }
+        .interceptor-btn.arrow[aria-pressed="true"] { border-color: var(--color-arrow); box-shadow: 0 0 20px rgba(255,68,136,0.4); }
+        
+        .interceptor-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(9px, 2.5vw, 11px);
+            font-weight: 700;
+            color: var(--color-text-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .interceptor-key {
+            font-size: clamp(8px, 2vw, 10px);
+            color: #6a8aaa;
+            margin-top: 2px;
+        }
+        
+        .interceptor-count {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(12px, 3vw, 16px);
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        
+        .tamir .interceptor-count { color: var(--color-tamir); }
+        .stunner .interceptor-count { color: var(--color-stunner); }
+        .arrow .interceptor-count { color: var(--color-arrow); }
+        
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 3 / 2;
+        }
+        
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            border: 2px solid var(--color-border);
+            border-radius: 4px;
+            box-shadow: 0 0 40px rgba(0,100,200,0.3), inset 0 0 100px rgba(0,50,100,0.1);
+            cursor: crosshair;
+            touch-action: none;
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 100;
+            display: none;
+            padding: 20px;
+            width: 90%;
+            max-width: 400px;
+        }
+        
+        .overlay.active { display: block; }
+        
+        .overlay-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(28px, 8vw, 48px);
+            font-weight: 900;
+            color: var(--color-primary);
+            text-shadow: 0 0 30px rgba(0,212,255,0.8), 0 0 60px rgba(0,212,255,0.4);
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+        
+        .overlay-subtitle {
+            font-size: clamp(12px, 3.5vw, 18px);
+            color: #8ab;
+            margin-bottom: 20px;
+        }
+        
+        .start-btn {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(12px, 3vw, 16px);
+            font-weight: 700;
+            color: var(--color-bg);
+            background: linear-gradient(180deg, var(--color-primary) 0%, #0088aa 100%);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 30px rgba(0,212,255,0.5);
+        }
+        
+        .start-btn:hover,
+        .start-btn:focus {
+            transform: scale(1.05);
+            box-shadow: 0 0 50px rgba(0,212,255,0.8);
+            outline: none;
+        }
+        
+        .start-btn:focus-visible {
+            outline: 2px solid white;
+            outline-offset: 2px;
+        }
+        
+        .game-over .overlay-title {
+            color: var(--color-danger);
+            text-shadow: 0 0 30px rgba(255,68,68,0.8);
+        }
+        
+        .wave-complete .overlay-title {
+            color: var(--color-tamir);
+            text-shadow: 0 0 30px rgba(0,255,136,0.8);
+        }
+        
+        .wave-bonus {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(14px, 4vw, 20px);
+            color: var(--color-stunner);
+            margin: 10px 0 20px 0;
+            text-shadow: 0 0 15px rgba(255,170,0,0.6);
+        }
+        
+        .instructions {
+            font-size: clamp(10px, 2.5vw, 12px);
+            color: #4a6a8a;
+            text-align: center;
+            padding: 5px;
+            max-width: 900px;
+        }
+        
+        .instructions span {
+            color: #6a9aba;
+        }
+        
+        /* Hide keyboard instructions on touch devices */
+        @media (hover: none) and (pointer: coarse) {
+            .interceptor-key {
+                display: none;
+            }
+            .instructions {
+                display: none;
+            }
+        }
+        
+        /* Landscape mobile adjustments */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .game-container {
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 5px;
+            }
+            .hud {
+                order: 2;
+                max-width: none;
+                width: auto;
+                flex: 0 0 auto;
+            }
+            .canvas-wrapper {
+                order: 1;
+                max-width: calc(100vh - 20px);
+                max-height: calc(100vh - 20px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="hud" role="toolbar" aria-label="Game controls and status">
+            <div class="hud-section">
+                <span class="hud-label">Score</span>
+                <span class="hud-value score" id="score" aria-live="polite">0</span>
+            </div>
+            
+            <div class="interceptor-panel" role="group" aria-label="Interceptor selection">
+                <button class="interceptor-btn tamir" data-type="tamir" aria-pressed="true" aria-label="Tamir interceptor: fast, small blast radius">
+                    <span class="interceptor-name">Tamir</span>
+                    <span class="interceptor-key">[1]</span>
+                    <span class="interceptor-count" id="tamir-count">30</span>
+                </button>
+                <button class="interceptor-btn stunner" data-type="stunner" aria-pressed="false" aria-label="Stunner interceptor: medium speed, larger blast radius">
+                    <span class="interceptor-name">Stunner</span>
+                    <span class="interceptor-key">[2]</span>
+                    <span class="interceptor-count" id="stunner-count">15</span>
+                </button>
+                <button class="interceptor-btn arrow" data-type="arrow" aria-pressed="false" aria-label="Arrow interceptor: slow, massive blast radius">
+                    <span class="interceptor-name">Arrow</span>
+                    <span class="interceptor-key">[3]</span>
+                    <span class="interceptor-count" id="arrow-count">5</span>
+                </button>
+            </div>
+            
+            <div class="hud-section">
+                <span class="hud-label">Wave</span>
+                <span class="hud-value wave" id="wave">1</span>
+            </div>
+            
+            <div class="hud-section">
+                <span class="hud-label">Cities</span>
+                <span class="hud-value cities" id="cities" aria-live="polite">6</span>
+            </div>
+        </div>
+        
+        <div class="canvas-wrapper">
+            <canvas id="gameCanvas" width="900" height="600" aria-label="Game area - tap or click to fire interceptors"></canvas>
+            
+            <div class="overlay active" id="startOverlay" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+                <div class="overlay-title" id="startTitle">IRON DOME</div>
+                <div class="overlay-subtitle">Defend your cities from incoming missiles</div>
+                <button class="start-btn" id="startBtn">LAUNCH DEFENSE</button>
+            </div>
+            
+            <div class="overlay game-over" id="gameOverOverlay" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+                <div class="overlay-title" id="gameOverTitle">MISSION FAILED</div>
+                <div class="overlay-subtitle">Final Score: <span id="finalScore">0</span></div>
+                <button class="start-btn" id="restartBtn">TRY AGAIN</button>
+            </div>
+            
+            <div class="overlay" id="waveOverlay" role="alert" aria-live="assertive">
+                <div class="overlay-title" id="waveTitle">WAVE 1</div>
+                <div class="overlay-subtitle">Incoming threat detected</div>
+            </div>
+            
+            <div class="overlay wave-complete" id="waveCompleteOverlay" role="dialog" aria-modal="true" aria-labelledby="waveCompleteTitle">
+                <div class="overlay-title" id="waveCompleteTitle">WAVE COMPLETE</div>
+                <div class="overlay-subtitle" id="waveStats">Missiles intercepted: 0</div>
+                <div class="wave-bonus" id="waveBonus"></div>
+                <button class="start-btn" id="continueBtn">CONTINUE</button>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <span>[1/2/3]</span> Select Interceptor | <span>[Click/Tap]</span> Fire | <span>Tamir</span>: Fast, small blast | <span>Stunner</span>: Medium, larger blast | <span>Arrow</span>: Slow, massive blast
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+        
+        // ============================================
+        // CONSTANTS
+        // ============================================
+        const GAME_WIDTH = 900;
+        const GAME_HEIGHT = 600;
+        const GROUND_HEIGHT = 50;
+        const CITY_HIT_RADIUS = 40;
+        const INTERCEPTOR_HIT_THRESHOLD = 10;
+        const PARTICLE_COUNT = 20;
+        const TRAIL_LENGTH_MISSILE = 20;
+        const TRAIL_LENGTH_INTERCEPTOR = 15;
+        const STAR_COUNT = 150;
+        
+        // Enemy missile type configurations
+        const ENEMY_MISSILE_TYPES = {
+            standard: {
+                speedMultiplier: 1.0,
+                size: 4,
+                glowSize: 8,
+                color: '#ff4444',
+                glowColor: 'rgba(255,100,50,0.5)',
+                trailColor: 'rgba(255,100,50,',
+                points: 100
+            },
+            fast: {
+                speedMultiplier: 1.8,
+                size: 3,
+                glowSize: 6,
+                color: '#ffff00',
+                glowColor: 'rgba(255,255,0,0.5)',
+                trailColor: 'rgba(255,255,0,',
+                points: 150
+            },
+            heavy: {
+                speedMultiplier: 0.6,
+                size: 6,
+                glowSize: 12,
+                color: '#ff00ff',
+                glowColor: 'rgba(255,0,255,0.5)',
+                trailColor: 'rgba(255,0,255,',
+                points: 200,
+                blastRadius: 60
+            },
+            cluster: {
+                speedMultiplier: 0.9,
+                size: 5,
+                glowSize: 10,
+                color: '#00ffff',
+                glowColor: 'rgba(0,255,255,0.5)',
+                trailColor: 'rgba(0,255,255,',
+                points: 75,
+                splitCount: 3
+            },
+            clusterbomb: {
+                speedMultiplier: 1.2,
+                size: 3,
+                glowSize: 5,
+                color: '#00ffaa',
+                glowColor: 'rgba(0,255,170,0.4)',
+                trailColor: 'rgba(0,255,170,',
+                points: 50
+            }
+        };
+        
+        // Interceptor configurations
+        const INTERCEPTOR_TYPES = {
+            tamir: {
+                speed: 8,
+                blastRadius: 40,
+                color: '#00ff88',
+                trailColor: 'rgba(0,255,136,',
+                explosionSound: 'explosion_small'
+            },
+            stunner: {
+                speed: 6,
+                blastRadius: 60,
+                color: '#ffaa00',
+                trailColor: 'rgba(255,170,0,',
+                explosionSound: 'explosion_medium'
+            },
+            arrow: {
+                speed: 4,
+                blastRadius: 100,
+                color: '#ff4488',
+                trailColor: 'rgba(255,68,136,',
+                explosionSound: 'explosion_large'
+            }
+        };
+        
+        // City positions (relative to GAME_WIDTH)
+        const CITY_POSITIONS = [100, 200, 300, 600, 700, 800];
+        
+        // Launch site positions
+        const LAUNCH_SITE_POSITIONS = [50, 450, 850];
+        
+        // ============================================
+        // DOM ELEMENT CACHE
+        // ============================================
+        const DOM = {
+            canvas: document.getElementById('gameCanvas'),
+            score: document.getElementById('score'),
+            wave: document.getElementById('wave'),
+            cities: document.getElementById('cities'),
+            tamirCount: document.getElementById('tamir-count'),
+            stunnerCount: document.getElementById('stunner-count'),
+            arrowCount: document.getElementById('arrow-count'),
+            startOverlay: document.getElementById('startOverlay'),
+            gameOverOverlay: document.getElementById('gameOverOverlay'),
+            waveOverlay: document.getElementById('waveOverlay'),
+            waveCompleteOverlay: document.getElementById('waveCompleteOverlay'),
+            waveTitle: document.getElementById('waveTitle'),
+            waveCompleteTitle: document.getElementById('waveCompleteTitle'),
+            waveStats: document.getElementById('waveStats'),
+            waveBonus: document.getElementById('waveBonus'),
+            finalScore: document.getElementById('finalScore'),
+            startBtn: document.getElementById('startBtn'),
+            restartBtn: document.getElementById('restartBtn'),
+            continueBtn: document.getElementById('continueBtn'),
+            interceptorBtns: document.querySelectorAll('.interceptor-btn')
+        };
+        
+        const ctx = DOM.canvas.getContext('2d');
+        
+        // ============================================
+        // AUDIO SYSTEM
+        // ============================================
+        const AudioSystem = {
+            ctx: null,
+            
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+            
+            play(type) {
+                if (!this.ctx) return;
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                const now = this.ctx.currentTime;
+                
+                switch(type) {
+                    case 'launch':
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        osc.start(now);
+                        osc.stop(now + 0.2);
+                        break;
+                        
+                    case 'explosion_small':
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(200, now);
+                        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                        gain.gain.setValueAtTime(0.4, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                        osc.start(now);
+                        osc.stop(now + 0.3);
+                        break;
+                        
+                    case 'explosion_medium':
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+                        gain.gain.setValueAtTime(0.5, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                        osc.start(now);
+                        osc.stop(now + 0.5);
+                        break;
+                        
+                    case 'explosion_large':
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(100, now);
+                        osc.frequency.exponentialRampToValueAtTime(20, now + 0.8);
+                        gain.gain.setValueAtTime(0.6, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+                        osc.start(now);
+                        osc.stop(now + 0.8);
+                        
+                        // Rumble
+                        const rumble = this.ctx.createOscillator();
+                        const rumbleGain = this.ctx.createGain();
+                        rumble.connect(rumbleGain);
+                        rumbleGain.connect(this.ctx.destination);
+                        rumble.type = 'sine';
+                        rumble.frequency.setValueAtTime(40, now);
+                        rumble.frequency.exponentialRampToValueAtTime(15, now + 0.6);
+                        rumbleGain.gain.setValueAtTime(0.4, now);
+                        rumbleGain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                        rumble.start(now);
+                        rumble.stop(now + 0.6);
+                        break;
+                        
+                    case 'city_hit':
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(400, now);
+                        osc.frequency.exponentialRampToValueAtTime(100, now + 0.5);
+                        gain.gain.setValueAtTime(0.5, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                        osc.start(now);
+                        osc.stop(now + 0.5);
+                        
+                        // Alarm
+                        const alarm = this.ctx.createOscillator();
+                        const alarmGain = this.ctx.createGain();
+                        alarm.connect(alarmGain);
+                        alarmGain.connect(this.ctx.destination);
+                        alarm.type = 'square';
+                        alarm.frequency.setValueAtTime(800, now);
+                        alarm.frequency.setValueAtTime(600, now + 0.1);
+                        alarm.frequency.setValueAtTime(800, now + 0.2);
+                        alarm.frequency.setValueAtTime(600, now + 0.3);
+                        alarmGain.gain.setValueAtTime(0.2, now);
+                        alarmGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        alarm.start(now);
+                        alarm.stop(now + 0.4);
+                        break;
+                        
+                    case 'intercept':
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(800, now);
+                        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                        osc.frequency.exponentialRampToValueAtTime(400, now + 0.2);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        osc.start(now);
+                        osc.stop(now + 0.2);
+                        break;
+                        
+                    case 'cluster_split':
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(600, now);
+                        osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+                        gain.gain.setValueAtTime(0.25, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                        osc.start(now);
+                        osc.stop(now + 0.15);
+                        break;
+                        
+                    case 'wave_start':
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(300, now);
+                        osc.frequency.exponentialRampToValueAtTime(600, now + 0.2);
+                        osc.frequency.setValueAtTime(300, now + 0.3);
+                        osc.frequency.exponentialRampToValueAtTime(800, now + 0.5);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                        osc.start(now);
+                        osc.stop(now + 0.6);
+                        break;
+                }
+            }
+        };
+        
+        // ============================================
+        // GAME STATE
+        // ============================================
+        const Game = {
+            state: 'start',
+            score: 0,
+            wave: 1,
+            selectedInterceptor: 'tamir',
+            missilesInterceptedThisWave: 0,
+            totalMissilesThisWave: 0,
+            waveInProgress: false,
+            spawnInterval: null,
+            
+            interceptorAmmo: { tamir: 30, stunner: 15, arrow: 5 },
+            
+            enemyMissiles: [],
+            interceptors: [],
+            explosions: [],
+            particles: [],
+            cities: [],
+            stars: [],
+            launchSites: [],
+            
+            // Pre-computed gradients
+            skyGradient: null,
+            groundGradient: null,
+            buildingGradient: null,
+            
+            // Input state
+            lastPointerX: 0,
+            lastPointerY: 0,
+            
+            init() {
+                this.initStars();
+                this.initCities();
+                this.initLaunchSites();
+                this.createGradients();
+                this.updateHUD();
+            },
+            
+            createGradients() {
+                // Sky gradient
+                this.skyGradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+                this.skyGradient.addColorStop(0, '#0a0a15');
+                this.skyGradient.addColorStop(0.5, '#101525');
+                this.skyGradient.addColorStop(1, '#1a2040');
+                
+                // Ground gradient
+                this.groundGradient = ctx.createLinearGradient(0, GAME_HEIGHT - GROUND_HEIGHT, 0, GAME_HEIGHT);
+                this.groundGradient.addColorStop(0, '#1a2535');
+                this.groundGradient.addColorStop(1, '#0d1520');
+            },
+            
+            initStars() {
+                this.stars = [];
+                for (let i = 0; i < STAR_COUNT; i++) {
+                    this.stars.push({
+                        x: Math.random() * GAME_WIDTH,
+                        y: Math.random() * (GAME_HEIGHT - 100),
+                        size: Math.random() * 2 + 0.5,
+                        twinkle: Math.random() * Math.PI * 2,
+                        speed: Math.random() * 0.02 + 0.01
+                    });
+                }
+            },
+            
+            initCities() {
+                this.cities = CITY_POSITIONS.map(x => ({
+                    x: x,
+                    y: GAME_HEIGHT - 30,
+                    alive: true,
+                    buildings: this.generateBuildings(),
+                    windowStates: [] // Pre-computed window states
+                }));
+                
+                // Pre-compute window states for each city
+                this.cities.forEach(city => {
+                    city.buildings.forEach(b => {
+                        const states = [];
+                        for (let w = 0; w < b.windows; w++) {
+                            states.push(Math.random() > 0.3);
+                        }
+                        city.windowStates.push(states);
+                    });
+                });
+            },
+            
+            generateBuildings() {
+                const buildings = [];
+                for (let i = 0; i < 5; i++) {
+                    buildings.push({
+                        width: 8 + Math.random() * 6,
+                        height: 15 + Math.random() * 25,
+                        offset: i * 12 - 24,
+                        windows: Math.floor(Math.random() * 4) + 2
+                    });
+                }
+                return buildings;
+            },
+            
+            initLaunchSites() {
+                this.launchSites = LAUNCH_SITE_POSITIONS.map(x => ({
+                    x: x,
+                    y: GAME_HEIGHT - 20
+                }));
+            },
+            
+            reset() {
+                this.state = 'playing';
+                this.score = 0;
+                this.wave = 1;
+                this.missilesInterceptedThisWave = 0;
+                this.totalMissilesThisWave = 0;
+                this.waveInProgress = false;
+                this.interceptorAmmo = { tamir: 30, stunner: 15, arrow: 5 };
+                this.enemyMissiles = [];
+                this.interceptors = [];
+                this.explosions = [];
+                this.particles = [];
+                
+                if (this.spawnInterval) {
+                    clearInterval(this.spawnInterval);
+                    this.spawnInterval = null;
+                }
+                
+                this.initCities();
+                this.initLaunchSites();
+                this.updateHUD();
+            },
+            
+            selectInterceptor(type) {
+                this.selectedInterceptor = type;
+                DOM.interceptorBtns.forEach(btn => {
+                    btn.setAttribute('aria-pressed', btn.dataset.type === type ? 'true' : 'false');
+                });
+            },
+            
+            getClosestLaunchSite(targetX) {
+                let closest = this.launchSites[0];
+                let minDist = Math.abs(targetX - this.launchSites[0].x);
+                
+                for (const site of this.launchSites) {
+                    const dist = Math.abs(targetX - site.x);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = site;
+                    }
+                }
+                return closest;
+            },
+            
+            fireInterceptor(targetX, targetY) {
+                if (this.interceptorAmmo[this.selectedInterceptor] <= 0) return;
+                
+                const config = INTERCEPTOR_TYPES[this.selectedInterceptor];
+                const launchSite = this.getClosestLaunchSite(targetX);
+                
+                const dx = targetX - launchSite.x;
+                const dy = targetY - launchSite.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 1) return; // Prevent division issues
+                
+                this.interceptors.push({
+                    x: launchSite.x,
+                    y: launchSite.y,
+                    targetX: targetX,
+                    targetY: targetY,
+                    vx: (dx / dist) * config.speed,
+                    vy: (dy / dist) * config.speed,
+                    type: this.selectedInterceptor,
+                    trail: []
+                });
+                
+                this.interceptorAmmo[this.selectedInterceptor]--;
+                this.updateHUD();
+                AudioSystem.play('launch');
+            },
+            
+            spawnEnemyMissile(type = null) {
+                const aliveCities = this.cities.filter(c => c.alive);
+                if (aliveCities.length === 0) return;
+                
+                const targetCity = aliveCities[Math.floor(Math.random() * aliveCities.length)];
+                const startX = Math.random() * GAME_WIDTH;
+                
+                // Determine missile type if not specified
+                if (!type) {
+                    type = 'standard';
+                    if (this.wave >= 5 && Math.random() < 0.15) type = 'cluster';
+                    if (this.wave >= 8 && Math.random() < 0.1) type = 'fast';
+                    if (this.wave >= 12 && Math.random() < 0.08) type = 'heavy';
+                }
+                
+                const typeConfig = ENEMY_MISSILE_TYPES[type];
+                
+                // Base speed scales with wave
+                const baseSpeed = 0.35 + (this.wave * 0.05);
+                const speed = (baseSpeed + Math.random() * 0.25) * typeConfig.speedMultiplier;
+                
+                const dx = targetCity.x - startX;
+                const dy = targetCity.y - 20;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                this.enemyMissiles.push({
+                    x: startX,
+                    y: 0,
+                    startX: startX,
+                    startY: 0,
+                    targetX: targetCity.x,
+                    targetY: targetCity.y,
+                    vx: (dx / dist) * speed,
+                    vy: (dy / dist) * speed,
+                    type: type,
+                    trail: []
+                });
+            },
+            
+            spawnClusterBombs(x, y, targetCity) {
+                const splitCount = ENEMY_MISSILE_TYPES.cluster.splitCount;
+                AudioSystem.play('cluster_split');
+                
+                for (let i = 0; i < splitCount; i++) {
+                    // Scatter targets around the original target
+                    const offsetX = (Math.random() - 0.5) * 150;
+                    const newTargetX = Math.max(50, Math.min(GAME_WIDTH - 50, targetCity.x + offsetX));
+                    
+                    const dx = newTargetX - x;
+                    const dy = targetCity.y - y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    const speed = 0.6 + Math.random() * 0.3;
+                    
+                    this.enemyMissiles.push({
+                        x: x,
+                        y: y,
+                        startX: x,
+                        startY: y,
+                        targetX: newTargetX,
+                        targetY: targetCity.y,
+                        vx: (dx / dist) * speed,
+                        vy: (dy / dist) * speed,
+                        type: 'clusterbomb',
+                        trail: []
+                    });
+                }
+            },
+            
+            createExplosion(x, y, radius, color) {
+                this.explosions.push({
+                    x: x,
+                    y: y,
+                    radius: 0,
+                    maxRadius: radius,
+                    expanding: true,
+                    color: color,
+                    alpha: 1
+                });
+                
+                // Create particles
+                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                    const angle = (Math.PI * 2 / PARTICLE_COUNT) * i + Math.random() * 0.3;
+                    const speed = 2 + Math.random() * 4;
+                    this.particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        decay: 0.02 + Math.random() * 0.02,
+                        color: color,
+                        size: 2 + Math.random() * 3
+                    });
+                }
+            },
+            
+            updateHUD() {
+                DOM.score.textContent = this.score;
+                DOM.wave.textContent = this.wave;
+                DOM.cities.textContent = this.cities.filter(c => c.alive).length;
+                DOM.tamirCount.textContent = this.interceptorAmmo.tamir;
+                DOM.stunnerCount.textContent = this.interceptorAmmo.stunner;
+                DOM.arrowCount.textContent = this.interceptorAmmo.arrow;
+            },
+            
+            startWave() {
+                const missileCount = Math.floor(2 + this.wave * 1.5);
+                this.totalMissilesThisWave = missileCount;
+                this.missilesInterceptedThisWave = 0;
+                this.waveInProgress = true;
+                let spawned = 0;
+                
+                const spawnDelay = Math.max(1000, 2200 - (this.wave * 120));
+                
+                this.spawnInterval = setInterval(() => {
+                    if (spawned >= missileCount || this.state !== 'playing') {
+                        clearInterval(this.spawnInterval);
+                        this.spawnInterval = null;
+                        return;
+                    }
+                    this.spawnEnemyMissile();
+                    spawned++;
+                }, spawnDelay);
+            },
+            
+            showWaveOverlay() {
+                DOM.waveTitle.textContent = `WAVE ${this.wave}`;
+                DOM.waveOverlay.classList.add('active');
+                AudioSystem.play('wave_start');
+                
+                setTimeout(() => {
+                    DOM.waveOverlay.classList.remove('active');
+                    this.startWave();
+                }, 2000);
+            },
+            
+            showWaveCompleteScreen() {
+                const citiesAlive = this.cities.filter(c => c.alive).length;
+                const cityBonus = citiesAlive * 100;
+                const interceptBonus = this.missilesInterceptedThisWave * 25;
+                const totalBonus = cityBonus + interceptBonus;
+                
+                this.score += totalBonus;
+                this.updateHUD();
+                
+                DOM.waveCompleteTitle.textContent = `WAVE ${this.wave} COMPLETE`;
+                DOM.waveStats.textContent = `Intercepted: ${this.missilesInterceptedThisWave}/${this.totalMissilesThisWave} | Cities: ${citiesAlive}`;
+                DOM.waveBonus.textContent = `Bonus: +${totalBonus} points`;
+                DOM.waveCompleteOverlay.classList.add('active');
+                
+                AudioSystem.play('wave_start');
+            },
+            
+            nextWave() {
+                this.wave++;
+                
+                // Replenish ammo
+                const tamirRefill = Math.max(8, 18 - this.wave);
+                const stunnerRefill = Math.max(4, 10 - Math.floor(this.wave / 2));
+                const arrowRefill = Math.max(1, 4 - Math.floor(this.wave / 3));
+                
+                this.interceptorAmmo.tamir = Math.min(this.interceptorAmmo.tamir + tamirRefill, 60);
+                this.interceptorAmmo.stunner = Math.min(this.interceptorAmmo.stunner + stunnerRefill, 30);
+                this.interceptorAmmo.arrow = Math.min(this.interceptorAmmo.arrow + arrowRefill, 12);
+                this.updateHUD();
+                
+                this.showWaveOverlay();
+            },
+            
+            gameOver() {
+                this.state = 'gameover';
+                if (this.spawnInterval) {
+                    clearInterval(this.spawnInterval);
+                    this.spawnInterval = null;
+                }
+                DOM.finalScore.textContent = this.score;
+                DOM.gameOverOverlay.classList.add('active');
+            },
+            
+            update() {
+                if (this.state !== 'playing') return;
+                
+                // Update enemy missiles
+                for (let i = this.enemyMissiles.length - 1; i >= 0; i--) {
+                    const missile = this.enemyMissiles[i];
+                    missile.x += missile.vx;
+                    missile.y += missile.vy;
+                    
+                    // Add trail
+                    missile.trail.push({ x: missile.x, y: missile.y });
+                    if (missile.trail.length > TRAIL_LENGTH_MISSILE) missile.trail.shift();
+                    
+                    // Check if hit ground
+                    if (missile.y >= missile.targetY) {
+                        const typeConfig = ENEMY_MISSILE_TYPES[missile.type];
+                        
+                        // Heavy missiles have larger ground explosions
+                        const blastRadius = typeConfig.blastRadius || 30;
+                        
+                        // Check if hit city
+                        for (const city of this.cities) {
+                            if (city.alive && Math.abs(missile.x - city.x) < CITY_HIT_RADIUS) {
+                                city.alive = false;
+                                AudioSystem.play('city_hit');
+                                this.createExplosion(city.x, city.y, 50, '#ff4444');
+                                this.updateHUD();
+                                
+                                if (this.cities.filter(c => c.alive).length === 0) {
+                                    this.gameOver();
+                                }
+                            }
+                        }
+                        this.enemyMissiles.splice(i, 1);
+                        this.createExplosion(missile.x, missile.y, blastRadius, '#ff6600');
+                    }
+                }
+                
+                // Update interceptors
+                for (let i = this.interceptors.length - 1; i >= 0; i--) {
+                    const interceptor = this.interceptors[i];
+                    interceptor.x += interceptor.vx;
+                    interceptor.y += interceptor.vy;
+                    
+                    // Add trail
+                    interceptor.trail.push({ x: interceptor.x, y: interceptor.y });
+                    if (interceptor.trail.length > TRAIL_LENGTH_INTERCEPTOR) interceptor.trail.shift();
+                    
+                    // Check if reached target (using squared distance)
+                    const dx = interceptor.targetX - interceptor.x;
+                    const dy = interceptor.targetY - interceptor.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < INTERCEPTOR_HIT_THRESHOLD * INTERCEPTOR_HIT_THRESHOLD) {
+                        const config = INTERCEPTOR_TYPES[interceptor.type];
+                        this.createExplosion(interceptor.x, interceptor.y, config.blastRadius, config.color);
+                        AudioSystem.play(config.explosionSound);
+                        this.interceptors.splice(i, 1);
+                    }
+                }
+                
+                // Update explosions and check for hits
+                for (let i = this.explosions.length - 1; i >= 0; i--) {
+                    const exp = this.explosions[i];
+                    
+                    if (exp.expanding) {
+                        exp.radius += 4;
+                        if (exp.radius >= exp.maxRadius) {
+                            exp.expanding = false;
+                        }
+                        
+                        // Check for enemy missile hits (using squared distance)
+                        const radiusSq = exp.radius * exp.radius;
+                        for (let j = this.enemyMissiles.length - 1; j >= 0; j--) {
+                            const missile = this.enemyMissiles[j];
+                            const dx = missile.x - exp.x;
+                            const dy = missile.y - exp.y;
+                            const distSq = dx * dx + dy * dy;
+                            
+                            if (distSq < radiusSq) {
+                                const typeConfig = ENEMY_MISSILE_TYPES[missile.type];
+                                
+                                // Handle cluster missile splitting
+                                if (missile.type === 'cluster') {
+                                    const targetCity = this.cities.find(c => 
+                                        c.x === missile.targetX || Math.abs(c.x - missile.targetX) < 50
+                                    ) || this.cities.find(c => c.alive);
+                                    
+                                    if (targetCity) {
+                                        this.spawnClusterBombs(missile.x, missile.y, targetCity);
+                                    }
+                                }
+                                
+                                this.enemyMissiles.splice(j, 1);
+                                this.score += typeConfig.points;
+                                this.missilesInterceptedThisWave++;
+                                AudioSystem.play('intercept');
+                                this.updateHUD();
+                            }
+                        }
+                    } else {
+                        exp.alpha -= 0.03;
+                        exp.radius += 1;
+                        if (exp.alpha <= 0) {
+                            this.explosions.splice(i, 1);
+                        }
+                    }
+                }
+                
+                // Update particles
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.1; // gravity
+                    p.life -= p.decay;
+                    
+                    if (p.life <= 0) {
+                        this.particles.splice(i, 1);
+                    }
+                }
+                
+                // Check wave complete
+                if (this.waveInProgress && 
+                    this.enemyMissiles.length === 0 && 
+                    this.explosions.length === 0 && 
+                    !this.spawnInterval &&
+                    this.cities.some(c => c.alive)) {
+                    this.waveInProgress = false;
+                    this.showWaveCompleteScreen();
+                }
+            }
+        };
+        
+        // ============================================
+        // RENDERING
+        // ============================================
+        const Renderer = {
+            draw() {
+                ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                
+                this.drawBackground();
+                this.drawCities();
+                this.drawLaunchSites();
+                this.drawEnemyMissiles();
+                this.drawInterceptors();
+                this.drawExplosions();
+                this.drawParticles();
+                this.drawTargetReticle();
+            },
+            
+            drawBackground() {
+                // Sky
+                ctx.fillStyle = Game.skyGradient;
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                
+                // Stars
+                for (const star of Game.stars) {
+                    star.twinkle += star.speed;
+                    const alpha = 0.4 + Math.sin(star.twinkle) * 0.3;
+                    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Ground
+                ctx.fillStyle = Game.groundGradient;
+                ctx.fillRect(0, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
+                
+                // Ground line
+                ctx.strokeStyle = '#2a4a6a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, GAME_HEIGHT - GROUND_HEIGHT);
+                ctx.lineTo(GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT);
+                ctx.stroke();
+            },
+            
+            drawCities() {
+                for (let ci = 0; ci < Game.cities.length; ci++) {
+                    const city = Game.cities[ci];
+                    
+                    if (!city.alive) {
+                        // Draw ruins
+                        ctx.fillStyle = '#333';
+                        for (const b of city.buildings) {
+                            const rubbleHeight = b.height * 0.3;
+                            ctx.fillRect(city.x + b.offset - b.width/2, city.y - rubbleHeight, b.width, rubbleHeight);
+                        }
+                        continue;
+                    }
+                    
+                    // Draw buildings
+                    for (let bi = 0; bi < city.buildings.length; bi++) {
+                        const b = city.buildings[bi];
+                        
+                        // Building body gradient
+                        const grad = ctx.createLinearGradient(
+                            city.x + b.offset - b.width/2, 0,
+                            city.x + b.offset + b.width/2, 0
+                        );
+                        grad.addColorStop(0, '#3a4a5a');
+                        grad.addColorStop(0.5, '#4a5a6a');
+                        grad.addColorStop(1, '#2a3a4a');
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(city.x + b.offset - b.width/2, city.y - b.height, b.width, b.height);
+                        
+                        // Windows (use pre-computed states)
+                        ctx.fillStyle = '#ffdd88';
+                        const windowStates = city.windowStates[bi];
+                        for (let w = 0; w < b.windows; w++) {
+                            if (windowStates[w]) {
+                                const windowY = city.y - b.height + 5 + w * 8;
+                                ctx.fillRect(city.x + b.offset - 2, windowY, 4, 4);
+                            }
+                        }
+                    }
+                    
+                    // Dome shield effect
+                    ctx.strokeStyle = 'rgba(0,200,255,0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(city.x, city.y - 20, 45, Math.PI, 0);
+                    ctx.stroke();
+                }
+            },
+            
+            drawLaunchSites() {
+                for (const site of Game.launchSites) {
+                    // Base
+                    ctx.fillStyle = '#2a3a4a';
+                    ctx.fillRect(site.x - 15, site.y - 10, 30, 15);
+                    
+                    // Launcher
+                    ctx.fillStyle = '#4a5a6a';
+                    ctx.fillRect(site.x - 5, site.y - 20, 10, 15);
+                    
+                    // Radar dish
+                    ctx.strokeStyle = '#6a8aaa';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(site.x, site.y - 25, 8, Math.PI * 0.8, Math.PI * 0.2, true);
+                    ctx.stroke();
+                }
+            },
+            
+            drawEnemyMissiles() {
+                for (const missile of Game.enemyMissiles) {
+                    const typeConfig = ENEMY_MISSILE_TYPES[missile.type];
+                    
+                    // Trail
+                    ctx.lineWidth = 2;
+                    for (let i = 0; i < missile.trail.length - 1; i++) {
+                        const alpha = i / missile.trail.length;
+                        ctx.strokeStyle = typeConfig.trailColor + (alpha * 0.6) + ')';
+                        ctx.beginPath();
+                        ctx.moveTo(missile.trail[i].x, missile.trail[i].y);
+                        ctx.lineTo(missile.trail[i + 1].x, missile.trail[i + 1].y);
+                        ctx.stroke();
+                    }
+                    
+                    // Missile head
+                    ctx.fillStyle = typeConfig.color;
+                    ctx.beginPath();
+                    ctx.arc(missile.x, missile.y, typeConfig.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Glow
+                    ctx.fillStyle = typeConfig.glowColor;
+                    ctx.beginPath();
+                    ctx.arc(missile.x, missile.y, typeConfig.glowSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            },
+            
+            drawInterceptors() {
+                for (const interceptor of Game.interceptors) {
+                    const config = INTERCEPTOR_TYPES[interceptor.type];
+                    
+                    // Trail
+                    ctx.lineWidth = 3;
+                    for (let i = 0; i < interceptor.trail.length - 1; i++) {
+                        const alpha = i / interceptor.trail.length;
+                        ctx.strokeStyle = config.trailColor + (alpha * 0.8) + ')';
+                        ctx.beginPath();
+                        ctx.moveTo(interceptor.trail[i].x, interceptor.trail[i].y);
+                        ctx.lineTo(interceptor.trail[i + 1].x, interceptor.trail[i + 1].y);
+                        ctx.stroke();
+                    }
+                    
+                    // Interceptor head
+                    ctx.fillStyle = config.color;
+                    ctx.beginPath();
+                    ctx.arc(interceptor.x, interceptor.y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Glow
+                    ctx.fillStyle = config.trailColor + '0.4)';
+                    ctx.beginPath();
+                    ctx.arc(interceptor.x, interceptor.y, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            },
+            
+            drawExplosions() {
+                for (const exp of Game.explosions) {
+                    ctx.globalAlpha = exp.alpha;
+                    
+                    // Outer ring
+                    ctx.strokeStyle = exp.color;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    // Inner fill
+                    const gradient = ctx.createRadialGradient(exp.x, exp.y, 0, exp.x, exp.y, exp.radius);
+                    gradient.addColorStop(0, exp.color);
+                    gradient.addColorStop(0.5, exp.color + '80');
+                    gradient.addColorStop(1, 'transparent');
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.globalAlpha = 1;
+                }
+            },
+            
+            drawParticles() {
+                for (const p of Game.particles) {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            },
+            
+            drawTargetReticle() {
+                if (Game.state !== 'playing') return;
+                
+                const rect = DOM.canvas.getBoundingClientRect();
+                const scaleX = GAME_WIDTH / rect.width;
+                const scaleY = GAME_HEIGHT / rect.height;
+                const mouseX = (Game.lastPointerX - rect.left) * scaleX;
+                const mouseY = (Game.lastPointerY - rect.top) * scaleY;
+                
+                // Don't draw if pointer is outside canvas
+                if (mouseX < 0 || mouseX > GAME_WIDTH || mouseY < 0 || mouseY > GAME_HEIGHT) return;
+                
+                const config = INTERCEPTOR_TYPES[Game.selectedInterceptor];
+                
+                ctx.strokeStyle = config.color;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                
+                // Crosshair
+                ctx.beginPath();
+                ctx.moveTo(mouseX - 15, mouseY);
+                ctx.lineTo(mouseX - 5, mouseY);
+                ctx.moveTo(mouseX + 5, mouseY);
+                ctx.lineTo(mouseX + 15, mouseY);
+                ctx.moveTo(mouseX, mouseY - 15);
+                ctx.lineTo(mouseX, mouseY - 5);
+                ctx.moveTo(mouseX, mouseY + 5);
+                ctx.lineTo(mouseX, mouseY + 15);
+                ctx.stroke();
+                
+                // Blast radius preview
+                ctx.globalAlpha = 0.3;
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, config.blastRadius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                
+                ctx.setLineDash([]);
+            }
+        };
+        
+        // ============================================
+        // INPUT HANDLING
+        // ============================================
+        function getCanvasCoordinates(clientX, clientY) {
+            const rect = DOM.canvas.getBoundingClientRect();
+            const scaleX = GAME_WIDTH / rect.width;
+            const scaleY = GAME_HEIGHT / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+        
+        function handlePointerMove(clientX, clientY) {
+            Game.lastPointerX = clientX;
+            Game.lastPointerY = clientY;
+        }
+        
+        function handlePointerFire(clientX, clientY) {
+            if (Game.state !== 'playing') return;
+            
+            const coords = getCanvasCoordinates(clientX, clientY);
+            Game.fireInterceptor(coords.x, coords.y);
+        }
+        
+        // Mouse events
+        DOM.canvas.addEventListener('mousemove', (e) => {
+            handlePointerMove(e.clientX, e.clientY);
+        });
+        
+        DOM.canvas.addEventListener('click', (e) => {
+            handlePointerFire(e.clientX, e.clientY);
+        });
+        
+        // Touch events
+        DOM.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handlePointerMove(touch.clientX, touch.clientY);
+        }, { passive: false });
+        
+        DOM.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handlePointerMove(touch.clientX, touch.clientY);
+        }, { passive: false });
+        
+        DOM.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (e.changedTouches.length > 0) {
+                const touch = e.changedTouches[0];
+                handlePointerFire(touch.clientX, touch.clientY);
+            }
+        }, { passive: false });
+        
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '1') Game.selectInterceptor('tamir');
+            if (e.key === '2') Game.selectInterceptor('stunner');
+            if (e.key === '3') Game.selectInterceptor('arrow');
+        });
+        
+        // Button events (using addEventListener instead of inline handlers)
+        DOM.interceptorBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                Game.selectInterceptor(btn.dataset.type);
+            });
+        });
+        
+        DOM.startBtn.addEventListener('click', () => {
+            AudioSystem.init();
+            Game.reset();
+            DOM.startOverlay.classList.remove('active');
+            Game.showWaveOverlay();
+        });
+        
+        DOM.restartBtn.addEventListener('click', () => {
+            AudioSystem.init();
+            Game.reset();
+            DOM.gameOverOverlay.classList.remove('active');
+            Game.showWaveOverlay();
+        });
+        
+        DOM.continueBtn.addEventListener('click', () => {
+            DOM.waveCompleteOverlay.classList.remove('active');
+            Game.nextWave();
+        });
+        
+        // ============================================
+        // GAME LOOP
+        // ============================================
+        function gameLoop() {
+            Game.update();
+            Renderer.draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        Game.init();
+        gameLoop();
+        
+    })();
+    </script>
+</body>
+</html>
